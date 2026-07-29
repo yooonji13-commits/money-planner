@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>머니플래너</title>
 <meta name="description" content="개인 자산, 가족 월별 예산, 월 생활비를 관리하는 개인 가계부">
-<meta name="theme-color" content="#FFF6F8">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,49 +14,39 @@
 <style>
   html,body{ margin:0; padding:0; }
   :root{
-    --bg:#FFF6F8;
+    --bg:#FFFFFF;
     --surface:#FFFFFF;
-    --surface-alt:#FBEAF0;
-    --ink:#34222B;
-    --muted:#9C7C88;
-    --line:#F3DEE6;
-    --accent:#FF5C8A;
-    --accent-2:#7C6FF0;
+    --surface-alt:#F4F6F8;
+    --ink:#181C22;
+    --muted:#8B95A1;
+    --line:#EDEFF2;
+    --accent:#3182F6;
     --accent-ink:#FFFFFF;
-    --accent-soft:#FFE1EA;
-    --positive:#2FAE79;
-    --negative:#F1445F;
-    --warning:#EFA23C;
-    --grad-a:#FFD9E6;
-    --grad-b:#E6DBFF;
-    --shadow:0 1px 2px rgba(120,40,70,.05), 0 14px 32px -18px rgba(120,40,70,.28);
-    --radius-lg:22px;
-    --radius-md:16px;
-    --radius-sm:11px;
+    --accent-soft:#EAF2FE;
+    --positive:#17BF83;
+    --negative:#F0424E;
+    --warning:#FFA929;
+    --radius-lg:16px;
+    --radius-md:12px;
+    --radius-sm:9px;
     --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Segoe UI",Roboto,"Noto Sans KR",sans-serif;
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --bg:#1D1520; --surface:#2A1F2C; --surface-alt:#352A38; --ink:#F7E9EF;
-      --muted:#B99CAE; --line:#42323F; --accent:#FF84AB; --accent-2:#A99BFF; --accent-ink:#2B1019;
-      --accent-soft:#3D2531; --positive:#5CD79A; --negative:#FF8FA0; --warning:#F4BC63;
-      --grad-a:#3B2433; --grad-b:#2A2447;
-      --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 32px -18px rgba(0,0,0,.55);
+      --bg:#121417; --surface:#121417; --surface-alt:#1D2024; --ink:#F2F4F6;
+      --muted:#8B95A1; --line:#24272C; --accent:#5B9CFF; --accent-ink:#0B1420;
+      --accent-soft:#152238; --positive:#33D9A0; --negative:#FF6B75; --warning:#FFC24B;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#1D1520; --surface:#2A1F2C; --surface-alt:#352A38; --ink:#F7E9EF;
-    --muted:#B99CAE; --line:#42323F; --accent:#FF84AB; --accent-2:#A99BFF; --accent-ink:#2B1019;
-    --accent-soft:#3D2531; --positive:#5CD79A; --negative:#FF8FA0; --warning:#F4BC63;
-    --grad-a:#3B2433; --grad-b:#2A2447;
-    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 32px -18px rgba(0,0,0,.55);
+    --bg:#121417; --surface:#121417; --surface-alt:#1D2024; --ink:#F2F4F6;
+    --muted:#8B95A1; --line:#24272C; --accent:#5B9CFF; --accent-ink:#0B1420;
+    --accent-soft:#152238; --positive:#33D9A0; --negative:#FF6B75; --warning:#FFC24B;
   }
   :root[data-theme="light"]{
-    --bg:#FFF6F8; --surface:#FFFFFF; --surface-alt:#FBEAF0; --ink:#34222B;
-    --muted:#9C7C88; --line:#F3DEE6; --accent:#FF5C8A; --accent-2:#7C6FF0; --accent-ink:#FFFFFF;
-    --accent-soft:#FFE1EA; --positive:#2FAE79; --negative:#F1445F; --warning:#EFA23C;
-    --grad-a:#FFD9E6; --grad-b:#E6DBFF;
-    --shadow:0 1px 2px rgba(120,40,70,.05), 0 14px 32px -18px rgba(120,40,70,.28);
+    --bg:#FFFFFF; --surface:#FFFFFF; --surface-alt:#F4F6F8; --ink:#181C22;
+    --muted:#8B95A1; --line:#EDEFF2; --accent:#3182F6; --accent-ink:#FFFFFF;
+    --accent-soft:#EAF2FE; --positive:#17BF83; --negative:#F0424E; --warning:#FFA929;
   }
 
   *{box-sizing:border-box;}
@@ -74,54 +64,41 @@
     display:flex;
     flex-direction:column;
     position:relative;
-    box-shadow:var(--shadow);
   }
 
   .mp-header{
     position:sticky; top:0; z-index:5;
     background:var(--bg);
-    padding:20px 20px 14px;
+    padding:20px 20px 12px;
+    border-bottom:1px solid var(--line);
   }
   .mp-header h1{
-    margin:0; font-size:1.55rem; font-weight:800; letter-spacing:-0.02em;
-    background:linear-gradient(120deg, var(--accent), var(--accent-2));
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-    display:inline-block;
+    margin:0; font-size:1.4rem; font-weight:800; letter-spacing:-0.02em; color:var(--ink);
   }
   .mp-header .mp-date{
     margin-top:3px; font-size:.8rem; color:var(--muted); font-weight:600;
   }
 
-  .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:14px; }
+  .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
 
   .mp-card{
     background:var(--surface);
     border:1px solid var(--line);
     border-radius:var(--radius-lg);
     padding:18px;
-    box-shadow:var(--shadow);
   }
 
   .mp-card + .mp-card{ margin-top:0; }
 
-  .mp-hero{
-    position:relative; overflow:hidden; border:none; color:var(--accent-ink);
-    background:linear-gradient(135deg, var(--grad-a), var(--grad-b));
-  }
-  .mp-hero::before{
-    content:""; position:absolute; top:-40px; right:-30px; width:150px; height:150px;
-    border-radius:50%; background:radial-gradient(circle, rgba(255,255,255,.55), rgba(255,255,255,0) 70%);
-    pointer-events:none;
-  }
-  .mp-hero .mp-label, .mp-hero .mp-sub{ color:var(--muted); position:relative; }
-  .mp-hero .mp-total{ color:var(--ink); position:relative; }
+  .mp-hero{ padding:20px 18px; }
+  .mp-hero .mp-total{ color:var(--ink); }
 
   .mp-label{
     font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
   }
 
   .mp-total{
-    font-size:2.2rem; font-weight:800; letter-spacing:-0.02em;
+    font-size:2.1rem; font-weight:800; letter-spacing:-0.02em;
     font-variant-numeric:tabular-nums;
     margin-top:4px;
   }
@@ -132,12 +109,18 @@
 
   /* account cards */
   .mp-account{
-    background:var(--surface); border:1px solid var(--line); border-left:5px solid var(--tint, var(--accent));
+    background:var(--surface); border:1px solid var(--line);
     border-radius:var(--radius-lg);
-    padding:14px 16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:10px;
   }
-  .mp-account-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .mp-account-name{ font-size:.95rem; font-weight:650; }
+  .mp-account-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .mp-account-heading{ display:flex; align-items:center; gap:10px; }
+  .mp-account-badge{
+    width:34px; height:34px; border-radius:50%; background:var(--tint-soft, var(--accent-soft));
+    color:var(--tint, var(--accent)); font-weight:800; font-size:.85rem;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .mp-account-name{ font-size:.92rem; font-weight:650; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-icon-btn{
@@ -167,13 +150,12 @@
 
   .mp-btn{
     font-family:var(--font-ui);
-    background:linear-gradient(120deg, var(--accent), var(--accent-2)); color:var(--accent-ink); border:none;
+    background:var(--accent); color:var(--accent-ink); border:none;
     border-radius:999px; padding:9px 16px; font-size:.85rem; font-weight:700;
     cursor:pointer; white-space:nowrap;
-    box-shadow:0 6px 16px -8px color-mix(in srgb, var(--accent) 70%, transparent);
   }
   .mp-btn.ghost{
-    background:none; color:var(--accent); border:1.5px solid var(--accent); box-shadow:none;
+    background:none; color:var(--accent); border:1.5px solid var(--line);
   }
   .mp-btn.block{ width:100%; padding:11px; }
   .mp-btn.small{ padding:6px 12px; font-size:.78rem; }
@@ -193,14 +175,14 @@
   }
   .mp-month-switch .mp-month-label{ font-weight:800; font-size:1.05rem; letter-spacing:-0.01em; }
   .mp-month-btn{
-    background:var(--surface); border:1px solid var(--line); color:var(--accent);
-    width:34px; height:34px; border-radius:50%; font-size:1.1rem; cursor:pointer;
-    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow);
+    background:var(--surface); border:1px solid var(--line); color:var(--ink);
+    width:32px; height:32px; border-radius:50%; font-size:1.1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
   }
 
   /* progress bar */
-  .mp-progress{ height:7px; border-radius:99px; background:var(--surface-alt); overflow:hidden; margin-top:10px; }
-  .mp-progress > div{ height:100%; border-radius:99px; background:linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .mp-progress{ height:6px; border-radius:99px; background:var(--surface-alt); overflow:hidden; margin-top:10px; }
+  .mp-progress > div{ height:100%; border-radius:99px; background:var(--accent); }
   .mp-progress.warn > div{ background:var(--warning); }
   .mp-progress.over > div{ background:var(--negative); }
 
@@ -237,20 +219,21 @@
     max-width:480px; margin:0 auto;
     background:var(--surface); border-top:1px solid var(--line);
     display:flex; gap:6px; padding:10px 12px max(10px, env(safe-area-inset-bottom));
-    box-shadow:0 -8px 24px -18px rgba(120,40,70,.35);
   }
   .mp-tab{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
     background:none; border:none; color:var(--muted); font-family:var(--font-ui);
-    font-size:.68rem; font-weight:650; padding:7px 2px; cursor:pointer; border-radius:16px;
+    font-size:.68rem; font-weight:650; padding:7px 2px; cursor:pointer; position:relative;
   }
   .mp-tab .mp-tab-icon{
-    width:34px; height:26px; display:flex; align-items:center; justify-content:center;
-    border-radius:999px;
+    width:34px; height:24px; display:flex; align-items:center; justify-content:center;
   }
   .mp-tab.active{ color:var(--accent); }
-  .mp-tab.active .mp-tab-icon{ background:var(--accent-soft); }
-  .mp-tab svg{ width:20px; height:20px; }
+  .mp-tab.active::before{
+    content:""; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:4px; height:4px; border-radius:50%; background:var(--accent);
+  }
+  .mp-tab svg{ width:21px; height:21px; }
 
   .mp-add-account-form{ display:flex; gap:8px; margin-top:2px; }
 
@@ -410,16 +393,25 @@
       '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
       '</section>';
 
-    var tints = ["#FF5C8A","#7C6FF0","#2FAE79","#EFA23C"];
+    var tints = [
+      { c:"#3182F6", s:"#EAF2FE" },
+      { c:"#17BF83", s:"#E3F9F1" },
+      { c:"#8B5CF6", s:"#F1EBFF" },
+      { c:"#FFA929", s:"#FFF3E0" }
+    ];
     state.accounts.forEach(function(acc, idx){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
       var recent = log.slice().sort(function(a,b){ return b.ts - a.ts; }).slice(0, expanded ? 50 : 3);
-      html += '<div class="mp-account" style="--tint:' + tints[idx % tints.length] + '">' +
+      var tint = tints[idx % tints.length];
+      html += '<div class="mp-account" style="--tint:' + tint.c + ';--tint-soft:' + tint.s + '">' +
         '<div class="mp-account-top">' +
-          '<div>' +
-            '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
-            '<input type="number" inputmode="decimal" class="mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + acc.balance + '" style="margin-top:6px;width:140px;font-size:1.3rem;font-weight:700;' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+          '<div class="mp-account-heading">' +
+            '<div class="mp-account-badge">' + esc(acc.name.charAt(0)) + '</div>' +
+            '<div>' +
+              '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
+              '<input type="number" inputmode="decimal" class="mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + acc.balance + '" style="margin-top:4px;width:140px;font-size:1.3rem;font-weight:700;' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+            '</div>' +
           '</div>' +
           '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
         '</div>' +
