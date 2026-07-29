@@ -97,15 +97,18 @@
     padding:14px 16px; display:flex; flex-direction:column; gap:10px;
   }
   .mp-account-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .mp-account-heading{ display:flex; align-items:center; gap:10px; }
-  .mp-account-badge{
-    width:34px; height:34px; border-radius:50%; background:var(--tint-soft, var(--accent-soft));
-    color:var(--tint, var(--accent)); font-weight:800; font-size:.85rem;
-    display:flex; align-items:center; justify-content:center; flex-shrink:0;
-  }
   .mp-account-name{ font-size:.92rem; font-weight:650; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
+  .mp-account-body{
+    display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer;
+  }
+  .mp-account-body .mp-balance-edit{
+    font-size:1.35rem; font-weight:700; border:none; background:none; padding:2px 0; width:150px;
+  }
+  .mp-account-toggle{
+    font-size:.76rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
+  }
   .mp-icon-btn{
     background:none; border:none; color:var(--muted); font-size:.78rem; padding:4px 6px;
     border-radius:var(--radius-sm); cursor:pointer;
@@ -150,6 +153,11 @@
   .mp-log-amt{ font-variant-numeric:tabular-nums; font-weight:600; }
   .mp-log-amt.income{ color:var(--positive); }
   .mp-log-amt.expense{ color:var(--negative); }
+  .mp-log-actions{ display:flex; align-items:center; gap:2px; }
+  .mp-tx-edit{
+    display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; border-top:1px solid var(--line);
+  }
+  .mp-tx-edit .mp-tx-edit-actions{ grid-column:1 / -1; display:flex; gap:6px; justify-content:flex-end; }
 
   /* month switcher */
   .mp-month-switch{
@@ -347,12 +355,28 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null };
 
   function esc(s){
     return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
       return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
     });
+  }
+
+  function formatNumberString(raw){
+    raw = String(raw == null ? "" : raw);
+    var negative = /^\s*-/.test(raw);
+    var digits = raw.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+    if(digits === "") return negative ? "-" : "";
+    return (negative ? "-" : "") + Number(digits).toLocaleString("ko-KR");
+  }
+
+  function parseMoneyValue(raw){
+    raw = String(raw == null ? "" : raw);
+    var negative = /^\s*-/.test(raw);
+    var digits = raw.replace(/[^0-9]/g, "");
+    if(digits === "") return 0;
+    return (negative ? -1 : 1) * Number(digits);
   }
 
   function render(){
@@ -375,51 +399,62 @@
       '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
       '</section>';
 
-    var tints = [
-      { c:"#3182F6", s:"#EAF2FE" },
-      { c:"#17BF83", s:"#E3F9F1" },
-      { c:"#8B5CF6", s:"#F1EBFF" },
-      { c:"#FFA929", s:"#FFF3E0" }
-    ];
-    state.accounts.forEach(function(acc, idx){
+    state.accounts.forEach(function(acc){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
-      var recent = log.slice().sort(function(a,b){ return b.ts - a.ts; }).slice(0, expanded ? 50 : 3);
-      var tint = tints[idx % tints.length];
-      html += '<div class="mp-account" style="--tint:' + tint.c + ';--tint-soft:' + tint.s + '">' +
+      var sorted = log.slice().sort(function(a,b){ return b.ts - a.ts; });
+      var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
+
+      html += '<div class="mp-account">' +
         '<div class="mp-account-top">' +
-          '<div class="mp-account-heading">' +
-            '<div class="mp-account-badge">' + esc(acc.name.charAt(0)) + '</div>' +
-            '<div>' +
-              '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
-              '<input type="number" inputmode="decimal" class="mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + acc.balance + '" style="margin-top:4px;width:140px;font-size:1.3rem;font-weight:700;' + (acc.balance<0?'color:var(--negative);':'') + '">' +
-            '</div>' +
-          '</div>' +
+          '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
           '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
+        '</div>' +
+        '<div class="mp-account-body" data-action="toggle-log" data-id="' + acc.id + '">' +
+          '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+          '<span class="mp-account-toggle">' +
+            (expanded ? '기록 접기 ▴' : (log.length ? '기록 ' + log.length + '건 보기 ▾' : '기록 보기 ▾')) +
+          '</span>' +
         '</div>' +
         '<form class="mp-inline-form" data-action="add-tx" data-account="' + acc.id + '">' +
           '<select name="type">' +
             '<option value="expense">지출</option>' +
             '<option value="income">입금</option>' +
           '</select>' +
-          '<input type="number" inputmode="decimal" name="amount" placeholder="금액" required min="0" step="1">' +
-          '<input type="text" name="memo" placeholder="메모">' +
+          '<input type="date" name="date" value="' + todayISO + '" required style="flex:1 1 120px;">' +
+          '<input type="text" name="memo" placeholder="메모" style="flex:1 1 100px;">' +
+          '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required style="flex:1 1 90px;">' +
           '<button class="mp-btn small" type="submit">추가</button>' +
         '</form>' +
-        (log.length ? (
-          '<button class="mp-log-toggle" data-action="toggle-log" data-id="' + acc.id + '">' +
-            (expanded ? '전체 기록 접기' : '최근 기록 보기 (' + log.length + ')') +
-          '</button>' +
+        (expanded ? (
+          log.length ?
           '<div class="mp-log">' +
-            recent.map(function(t){
+            sorted.map(function(t){
+              if(editing === t.id){
+                return '<form class="mp-tx-edit" data-action="save-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">' +
+                  '<select name="type">' +
+                    '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
+                    '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
+                  '</select>' +
+                  '<input type="date" name="date" value="' + t.date + '" required>' +
+                  '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
+                  '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
+                  '<div class="mp-tx-edit-actions">' +
+                    '<button type="button" class="mp-icon-btn" data-action="cancel-edit-tx">취소</button>' +
+                    '<button type="submit" class="mp-btn small">저장</button>' +
+                  '</div>' +
+                '</form>';
+              }
               return '<div class="mp-log-row"><span class="mp-log-meta">' + fmtDateShort(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span>' +
-                '<span style="display:flex;align-items:center;gap:8px;">' +
+                '<span class="mp-log-actions">' +
                 '<span class="mp-log-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
+                '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✎</button>' +
                 '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✕</button>' +
                 '</span></div>';
             }).join("") +
           '</div>'
-        ) : '<div class="mp-empty">아직 기록이 없어요</div>') +
+          : '<div class="mp-empty">아직 기록이 없어요</div>'
+        ) : "") +
       '</div>';
     });
 
@@ -599,7 +634,17 @@
         if(acc) acc.balance += (entry.type === "income" ? -entry.amount : entry.amount);
       }
       state.logs[el.dataset.account] = log.filter(function(t){ return t.id !== el.dataset.id; });
+      if(uiFlags.editingTx && uiFlags.editingTx.txId === el.dataset.id) uiFlags.editingTx = null;
       saveState(); render(); return;
+    }
+
+    if(action === "start-edit-tx"){
+      uiFlags.editingTx = { accountId: el.dataset.account, txId: el.dataset.id };
+      render(); return;
+    }
+    if(action === "cancel-edit-tx"){
+      uiFlags.editingTx = null;
+      render(); return;
     }
 
     if(action === "delete-family-tx"){
@@ -619,6 +664,24 @@
     if(action === "month-next"){ state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
   });
 
+  root.addEventListener("input", function(e){
+    var el = e.target;
+    if(!el.classList || !el.classList.contains("mp-money")) return;
+    var caret = el.selectionStart;
+    var oldVal = el.value;
+    var digitsBefore = (oldVal.slice(0, caret).match(/[0-9]/g) || []).length;
+    var negative = /^\s*-/.test(oldVal);
+    var formatted = formatNumberString(oldVal);
+    el.value = formatted;
+    var count = 0, pos = formatted.length;
+    for(var i=0;i<formatted.length;i++){
+      if(/[0-9]/.test(formatted[i])) count++;
+      if(count === digitsBefore){ pos = i+1; break; }
+    }
+    if(digitsBefore === 0) pos = (negative && formatted.charAt(0)==="-") ? 1 : 0;
+    el.setSelectionRange(pos, pos);
+  });
+
   root.addEventListener("change", function(e){
     var el = e.target.closest("[data-action]");
     if(!el) return;
@@ -627,7 +690,7 @@
 
     if(action === "set-balance"){
       var acc = state.accounts.find(function(a){ return a.id === el.dataset.id; });
-      if(acc){ acc.balance = val; saveState(); render(); }
+      if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); render(); }
       return;
     }
     if(action === "set-budget"){
@@ -668,15 +731,38 @@
 
     if(action === "add-tx"){
       var accId = form.dataset.account;
-      var amount = Math.abs(Number(fd.get("amount")) || 0);
+      var amount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amount <= 0) return;
       var type = fd.get("type");
+      var date = fd.get("date") || todayISO;
       var memo = (fd.get("memo")||"").trim();
       var acc = state.accounts.find(function(a){ return a.id === accId; });
       if(!acc) return;
       acc.balance += (type === "income" ? amount : -amount);
-      getLog(accId).push({ id: uid(), date: todayISO, memo: memo, amount: amount, type: type, ts: Date.now() });
+      getLog(accId).push({ id: uid(), date: date, memo: memo, amount: amount, type: type, ts: Date.now() });
       form.reset();
+      saveState(); render(); return;
+    }
+
+    if(action === "save-edit-tx"){
+      var accId2 = form.dataset.account;
+      var txId = form.dataset.id;
+      var acc2 = state.accounts.find(function(a){ return a.id === accId2; });
+      var log2 = getLog(accId2);
+      var entry3 = log2.find(function(t){ return t.id === txId; });
+      if(!acc2 || !entry3) return;
+      var newAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(newAmount <= 0) return;
+      var newType = fd.get("type");
+      var newDate = fd.get("date") || entry3.date;
+      var newMemo = (fd.get("memo")||"").trim();
+      acc2.balance -= (entry3.type === "income" ? entry3.amount : -entry3.amount);
+      acc2.balance += (newType === "income" ? newAmount : -newAmount);
+      entry3.amount = newAmount;
+      entry3.type = newType;
+      entry3.date = newDate;
+      entry3.memo = newMemo;
+      uiFlags.editingTx = null;
       saveState(); render(); return;
     }
 
