@@ -98,6 +98,10 @@
   }
   .mp-account-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .mp-account-name{ font-size:.92rem; font-weight:650; }
+  .mp-account-number{
+    font-size:.76rem; color:var(--muted); border:none; background:none;
+    padding:2px 0; width:100%; margin-top:1px; font-variant-numeric:tabular-nums;
+  }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -270,8 +274,8 @@
       activeTab: "personal",
       currentMonth: currentMonthKey,
       accounts: [
-        { id: uid(), name: "카카오뱅크", balance: 0 },
-        { id: uid(), name: "하나은행", balance: 0 }
+        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "" },
+        { id: uid(), name: "하나은행", balance: 0, accountNumber: "" }
       ],
       logs: {},
       familyCategories: [
@@ -407,7 +411,10 @@
 
       html += '<div class="mp-account">' +
         '<div class="mp-account-top">' +
-          '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
+            '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' +
+          '</div>' +
           '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
         '</div>' +
         '<div class="mp-account-body" data-action="toggle-log" data-id="' + acc.id + '">' +
@@ -461,6 +468,7 @@
     html += uiFlags.showAddAccount ?
       '<form class="mp-add-account-form" data-action="add-account">' +
         '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
+        '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
         '<button class="mp-btn small" type="submit">추가</button>' +
       '</form>' :
       '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
@@ -693,6 +701,11 @@
       if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); render(); }
       return;
     }
+    if(action === "set-account-number"){
+      var accN = state.accounts.find(function(a){ return a.id === el.dataset.id; });
+      if(accN){ accN.accountNumber = el.value.trim(); saveState(); }
+      return;
+    }
     if(action === "set-budget"){
       var monthObj = getFamilyMonth(state.currentMonth);
       var entry = getCategoryEntry(monthObj, el.dataset.cat);
@@ -716,7 +729,8 @@
     if(action === "add-account"){
       var name = (fd.get("name")||"").trim();
       if(!name) return;
-      state.accounts.push({ id: uid(), name: name, balance: 0 });
+      var accountNumber = (fd.get("accountNumber")||"").trim();
+      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber });
       uiFlags.showAddAccount = false;
       saveState(); render(); return;
     }
