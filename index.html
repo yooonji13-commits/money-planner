@@ -93,9 +93,16 @@
   /* account cards */
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
+    border-left-width:4px; border-left-style:solid;
     border-radius:var(--radius-lg);
     padding:14px 16px; display:flex; flex-direction:column; gap:10px;
   }
+  .mp-color-swatch{
+    -webkit-appearance:none; appearance:none; width:26px; height:26px; flex-shrink:0;
+    border:1px solid var(--line); border-radius:7px; padding:0; background:none; cursor:pointer;
+  }
+  .mp-color-swatch::-webkit-color-swatch-wrapper{ padding:2px; }
+  .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:5px; }
   .mp-account-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .mp-account-name{ font-size:.92rem; font-weight:650; }
   .mp-account-number{
@@ -122,9 +129,14 @@
     outline:2px solid var(--accent); outline-offset:2px;
   }
 
-  .mp-inline-form{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-  .mp-inline-form input[type="number"]{ flex:1 1 90px; min-width:0; }
-  .mp-inline-form input[type="text"]{ flex:1 1 100px; min-width:0; }
+  .mp-tx-add-personal{
+    display:grid; grid-template-columns:50px 82px 1fr 58px auto;
+    gap:4px; align-items:center;
+  }
+  .mp-tx-add-personal select, .mp-tx-add-personal input{
+    padding:6px 4px; font-size:.74rem; min-width:0;
+  }
+  .mp-tx-add-personal .mp-btn{ padding:6px 10px; font-size:.74rem; }
 
   input[type="number"], input[type="text"], input[type="date"], select{
     font-family:var(--font-ui);
@@ -274,8 +286,8 @@
       activeTab: "personal",
       currentMonth: currentMonthKey,
       accounts: [
-        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "" },
-        { id: uid(), name: "하나은행", balance: 0, accountNumber: "" }
+        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "", color: "#3182F6" },
+        { id: uid(), name: "하나은행", balance: 0, accountNumber: "", color: "#17BF83" }
       ],
       logs: {},
       familyCategories: [
@@ -403,38 +415,48 @@
       '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
       '</section>';
 
+    html += uiFlags.showAddAccount ?
+      '<form class="mp-add-account-form" data-action="add-account">' +
+        '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
+        '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
+        '<button class="mp-btn small" type="submit">추가</button>' +
+      '</form>' :
+      '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
+
     state.accounts.forEach(function(acc){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
       var sorted = log.slice().sort(function(a,b){ return b.ts - a.ts; });
       var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
+      var color = acc.color || "#3182F6";
 
-      html += '<div class="mp-account">' +
+      html += '<div class="mp-account" style="border-left-color:' + color + ';">' +
         '<div class="mp-account-top">' +
           '<div style="flex:1;min-width:0;">' +
             '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
             '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' +
           '</div>' +
+          '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
           '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
         '</div>' +
         '<div class="mp-account-body" data-action="toggle-log" data-id="' + acc.id + '">' +
           '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
           '<span class="mp-account-toggle">' +
-            (expanded ? '기록 접기 ▴' : (log.length ? '기록 ' + log.length + '건 보기 ▾' : '기록 보기 ▾')) +
+            (expanded ? '접기 ▴' : (log.length ? '내역 ' + log.length + '건 · 입력하기 ▾' : '내역 입력하기 ▾')) +
           '</span>' +
         '</div>' +
-        '<form class="mp-inline-form" data-action="add-tx" data-account="' + acc.id + '">' +
-          '<select name="type">' +
-            '<option value="expense">지출</option>' +
-            '<option value="income">입금</option>' +
-          '</select>' +
-          '<input type="date" name="date" value="' + todayISO + '" required style="flex:1 1 120px;">' +
-          '<input type="text" name="memo" placeholder="메모" style="flex:1 1 100px;">' +
-          '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required style="flex:1 1 90px;">' +
-          '<button class="mp-btn small" type="submit">추가</button>' +
-        '</form>' +
         (expanded ? (
-          log.length ?
+          '<form class="mp-tx-add-personal" data-action="add-tx" data-account="' + acc.id + '">' +
+            '<select name="type">' +
+              '<option value="expense">지출</option>' +
+              '<option value="income">입금</option>' +
+            '</select>' +
+            '<input type="date" name="date" value="' + todayISO + '" required>' +
+            '<input type="text" name="memo" placeholder="메모">' +
+            '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+            '<button class="mp-btn small" type="submit">추가</button>' +
+          '</form>' +
+          (log.length ?
           '<div class="mp-log">' +
             sorted.map(function(t){
               if(editing === t.id){
@@ -460,18 +482,10 @@
                 '</span></div>';
             }).join("") +
           '</div>'
-          : '<div class="mp-empty">아직 기록이 없어요</div>'
+          : '<div class="mp-empty">아직 기록이 없어요</div>')
         ) : "") +
       '</div>';
     });
-
-    html += uiFlags.showAddAccount ?
-      '<form class="mp-add-account-form" data-action="add-account">' +
-        '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
-        '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
-        '<button class="mp-btn small" type="submit">추가</button>' +
-      '</form>' :
-      '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
 
     return html;
   }
@@ -706,6 +720,11 @@
       if(accN){ accN.accountNumber = el.value.trim(); saveState(); }
       return;
     }
+    if(action === "set-color"){
+      var accC = state.accounts.find(function(a){ return a.id === el.dataset.id; });
+      if(accC){ accC.color = el.value; saveState(); render(); }
+      return;
+    }
     if(action === "set-budget"){
       var monthObj = getFamilyMonth(state.currentMonth);
       var entry = getCategoryEntry(monthObj, el.dataset.cat);
@@ -730,7 +749,9 @@
       var name = (fd.get("name")||"").trim();
       if(!name) return;
       var accountNumber = (fd.get("accountNumber")||"").trim();
-      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber });
+      var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
+      var color = palette[state.accounts.length % palette.length];
+      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color });
       uiFlags.showAddAccount = false;
       saveState(); render(); return;
     }
