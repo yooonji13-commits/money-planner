@@ -8,12 +8,13 @@
 <meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="머니플래너">
 <meta name="format-detection" content="telephone=no">
 <style>
   html,body{ margin:0; padding:0; }
   :root{
+    color-scheme:light;
     --bg:#FFFFFF;
     --surface:#FFFFFF;
     --surface-alt:#F4F6F8;
@@ -30,23 +31,6 @@
     --radius-md:12px;
     --radius-sm:9px;
     --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Segoe UI",Roboto,"Noto Sans KR",sans-serif;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#121417; --surface:#121417; --surface-alt:#1D2024; --ink:#F2F4F6;
-      --muted:#8B95A1; --line:#24272C; --accent:#5B9CFF; --accent-ink:#0B1420;
-      --accent-soft:#152238; --positive:#33D9A0; --negative:#FF6B75; --warning:#FFC24B;
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#121417; --surface:#121417; --surface-alt:#1D2024; --ink:#F2F4F6;
-    --muted:#8B95A1; --line:#24272C; --accent:#5B9CFF; --accent-ink:#0B1420;
-    --accent-soft:#152238; --positive:#33D9A0; --negative:#FF6B75; --warning:#FFC24B;
-  }
-  :root[data-theme="light"]{
-    --bg:#FFFFFF; --surface:#FFFFFF; --surface-alt:#F4F6F8; --ink:#181C22;
-    --muted:#8B95A1; --line:#EDEFF2; --accent:#3182F6; --accent-ink:#FFFFFF;
-    --accent-soft:#EAF2FE; --positive:#17BF83; --negative:#F0424E; --warning:#FFA929;
   }
 
   *{box-sizing:border-box;}
@@ -69,14 +53,11 @@
   .mp-header{
     position:sticky; top:0; z-index:5;
     background:var(--bg);
-    padding:20px 20px 12px;
+    padding:16px 20px 12px;
     border-bottom:1px solid var(--line);
   }
-  .mp-header h1{
-    margin:0; font-size:1.4rem; font-weight:800; letter-spacing:-0.02em; color:var(--ink);
-  }
   .mp-header .mp-date{
-    margin-top:3px; font-size:.8rem; color:var(--muted); font-weight:600;
+    font-size:.95rem; color:var(--ink); font-weight:700; letter-spacing:-0.01em;
   }
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
@@ -243,7 +224,6 @@
 <body>
 <div id="mp-root">
   <header class="mp-header">
-    <h1 id="mp-title">머니플래너</h1>
     <div class="mp-date" id="mp-headerdate"></div>
   </header>
   <main class="mp-main" id="mp-main"></main>
