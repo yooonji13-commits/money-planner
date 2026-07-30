@@ -91,34 +91,45 @@
   .mp-sub{ font-size:.85rem; color:var(--muted); margin-top:2px; }
 
   /* account cards */
+  .mp-accounts-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  }
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
     border-left-width:4px; border-left-style:solid;
     border-radius:var(--radius-lg);
-    padding:14px 16px; display:flex; flex-direction:column; gap:10px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:8px;
+    aspect-ratio:1/1; overflow:hidden; justify-content:space-between;
+  }
+  .mp-account.is-expanded{
+    aspect-ratio:auto; grid-column:1 / -1; overflow:visible;
   }
   .mp-color-swatch{
-    -webkit-appearance:none; appearance:none; width:26px; height:26px; flex-shrink:0;
-    border:1px solid var(--line); border-radius:7px; padding:0; background:none; cursor:pointer;
+    -webkit-appearance:none; appearance:none; width:22px; height:22px; flex-shrink:0;
+    border:1px solid var(--line); border-radius:6px; padding:0; background:none; cursor:pointer;
   }
   .mp-color-swatch::-webkit-color-swatch-wrapper{ padding:2px; }
-  .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:5px; }
-  .mp-account-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .mp-account-name{ font-size:.92rem; font-weight:650; }
+  .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:4px; }
+  .mp-account-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+  .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-account-number{
-    font-size:.76rem; color:var(--muted); border:none; background:none;
+    font-size:.74rem; color:var(--muted); border:none; background:none;
     padding:2px 0; width:100%; margin-top:1px; font-variant-numeric:tabular-nums;
+  }
+  .mp-account-number-display{
+    font-size:.74rem; color:var(--muted); margin-top:1px; font-variant-numeric:tabular-nums;
+    cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
   }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
-    display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:flex-start; gap:2px; cursor:pointer;
   }
   .mp-account-body .mp-balance-edit{
-    font-size:1.35rem; font-weight:700; border:none; background:none; padding:2px 0; width:150px;
+    font-size:1.2rem; font-weight:700; border:none; background:none; padding:2px 0; width:100%;
   }
   .mp-account-toggle{
-    font-size:.76rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
+    font-size:.72rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
   }
   .mp-icon-btn{
     background:none; border:none; color:var(--muted); font-size:.78rem; padding:4px 6px;
@@ -149,6 +160,9 @@
     font-variant-numeric:tabular-nums;
   }
   select{ padding:8px 6px; }
+
+  input.mp-account-number{ background:none; border:none; padding:2px 0; border-radius:0; }
+  input.mp-account-number:focus{ outline:none; border-bottom:1.5px solid var(--accent); }
 
   .mp-btn{
     font-family:var(--font-ui);
@@ -186,6 +200,12 @@
     width:32px; height:32px; border-radius:50%; font-size:1.1rem; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
+  .mp-month-picker{
+    display:flex; gap:6px; align-items:center; background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--radius-md);
+    padding:10px; margin-bottom:2px;
+  }
+  .mp-month-picker select{ flex:1; min-width:0; }
 
   /* progress bar */
   .mp-progress{ height:6px; border-radius:99px; background:var(--surface-alt); overflow:hidden; margin-top:10px; }
@@ -371,7 +391,26 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, showMonthPicker:false };
+
+  function monthPickerHTML(mk){
+    var curY = parseInt(mk.slice(0,4),10);
+    var curM = parseInt(mk.slice(5,7),10);
+    var nowY = new Date().getFullYear();
+    var years = "";
+    for(var y = nowY - 6; y <= nowY + 4; y++){
+      years += '<option value="' + y + '"' + (y === curY ? ' selected' : '') + '>' + y + '년</option>';
+    }
+    var months = "";
+    for(var mo = 1; mo <= 12; mo++){
+      months += '<option value="' + mo + '"' + (mo === curM ? ' selected' : '') + '>' + mo + '월</option>';
+    }
+    return '<form class="mp-month-picker" data-action="goto-month">' +
+        '<select name="year">' + years + '</select>' +
+        '<select name="month">' + months + '</select>' +
+        '<button type="submit" class="mp-btn small">이동</button>' +
+      '</form>';
+  }
 
   function esc(s){
     return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
@@ -423,18 +462,23 @@
       '</form>' :
       '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
 
+    html += '<div class="mp-accounts-grid">';
     state.accounts.forEach(function(acc){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
       var sorted = log.slice().sort(function(a,b){ return b.ts - a.ts; });
       var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
       var color = acc.color || "#3182F6";
+      var editingNumber = !!uiFlags.editingAccountNumber[acc.id];
+      var numberField = (editingNumber || !acc.accountNumber) ?
+        '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' :
+        '<span class="mp-account-number-display" data-action="edit-account-number" data-id="' + acc.id + '">' + esc(acc.accountNumber) + '</span>';
 
-      html += '<div class="mp-account" style="border-left-color:' + color + ';">' +
+      html += '<div class="mp-account' + (expanded ? ' is-expanded' : '') + '" style="border-left-color:' + color + ';">' +
         '<div class="mp-account-top">' +
           '<div style="flex:1;min-width:0;">' +
             '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
-            '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' +
+            numberField +
           '</div>' +
           '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
           '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
@@ -486,6 +530,7 @@
         ) : "") +
       '</div>';
     });
+    html += '</div>';
 
     return html;
   }
@@ -577,9 +622,10 @@
 
     return '<div class="mp-month-switch">' +
         '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
-        '<div class="mp-month-label">' + monthLabel(mk) + ' 생활비</div>' +
+        '<div class="mp-month-label" data-action="toggle-month-picker" style="cursor:pointer;">' + monthLabel(mk) + ' 생활비 ' + (uiFlags.showMonthPicker ? '▴' : '▾') + '</div>' +
         '<button class="mp-month-btn" data-action="month-next">›</button>' +
       '</div>' +
+      (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">이번 달 생활비</div>' +
         '<input type="number" inputmode="decimal" data-action="set-living-budget" value="' + m.budget + '" style="font-size:1.6rem;font-weight:750;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
@@ -624,6 +670,14 @@
     var action = el.dataset.action;
 
     if(action === "show-add-account"){ uiFlags.showAddAccount = true; render(); return; }
+
+    if(action === "edit-account-number"){
+      uiFlags.editingAccountNumber[el.dataset.id] = true;
+      render();
+      var numInput = main.querySelector('.mp-account-number[data-id="' + el.dataset.id + '"]');
+      if(numInput){ numInput.focus(); numInput.setSelectionRange(numInput.value.length, numInput.value.length); }
+      return;
+    }
     if(action === "show-add-category"){ uiFlags.showAddCategory = true; render(); return; }
 
     if(action === "delete-account"){
@@ -684,6 +738,26 @@
 
     if(action === "month-prev"){ state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
     if(action === "month-next"){ state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
+  });
+
+  root.addEventListener("keydown", function(e){
+    if(e.key !== "Enter") return;
+    var el = e.target;
+    if(el.classList && el.classList.contains("mp-account-number")){
+      e.preventDefault();
+      el.blur();
+    }
+  });
+
+  root.addEventListener("focusout", function(e){
+    var el = e.target;
+    if(!el.classList || !el.classList.contains("mp-account-number")) return;
+    var id = el.dataset.id;
+    var acc = state.accounts.find(function(a){ return a.id === id; });
+    if(acc) acc.accountNumber = el.value.trim();
+    uiFlags.editingAccountNumber[id] = false;
+    saveState(); render();
   });
 
   root.addEventListener("input", function(e){
@@ -715,11 +789,6 @@
       if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); render(); }
       return;
     }
-    if(action === "set-account-number"){
-      var accN = state.accounts.find(function(a){ return a.id === el.dataset.id; });
-      if(accN){ accN.accountNumber = el.value.trim(); saveState(); }
-      return;
-    }
     if(action === "set-color"){
       var accC = state.accounts.find(function(a){ return a.id === el.dataset.id; });
       if(accC){ accC.color = el.value; saveState(); render(); }
@@ -744,6 +813,14 @@
     e.preventDefault();
     var action = form.dataset.action;
     var fd = new FormData(form);
+
+    if(action === "goto-month"){
+      var gy = fd.get("year");
+      var gm = String(fd.get("month")).padStart(2, "0");
+      state.currentMonth = gy + "-" + gm;
+      uiFlags.showMonthPicker = false;
+      saveState(); render(); return;
+    }
 
     if(action === "add-account"){
       var name = (fd.get("name")||"").trim();
