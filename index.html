@@ -140,15 +140,6 @@
     outline:2px solid var(--accent); outline-offset:2px;
   }
 
-  .mp-tx-add-personal{
-    display:grid; grid-template-columns:50px 82px 1fr 58px auto;
-    gap:4px; align-items:center;
-  }
-  .mp-tx-add-personal select, .mp-tx-add-personal input{
-    padding:6px 4px; font-size:.74rem; min-width:0;
-  }
-  .mp-tx-add-personal .mp-btn{ padding:6px 10px; font-size:.74rem; }
-
   input[type="number"], input[type="text"], input[type="date"], select{
     font-family:var(--font-ui);
     background:var(--surface-alt);
@@ -228,15 +219,22 @@
 
   .mp-tx-list{ display:flex; flex-direction:column; }
   .mp-tx-row{
-    display:grid; grid-template-columns:64px 1fr auto auto; gap:8px; align-items:center;
+    display:grid; grid-template-columns:56px 1fr auto auto; gap:6px; align-items:center;
     padding:9px 0; border-top:1px solid var(--line); font-size:.85rem;
   }
-  .mp-tx-row .mp-tx-date{ color:var(--muted); font-size:.75rem; font-variant-numeric:tabular-nums; }
+  .mp-tx-row > *{ min-width:0; }
+  .mp-tx-row .mp-tx-date{ color:var(--muted); font-size:.72rem; font-variant-numeric:tabular-nums; }
   .mp-tx-row .mp-tx-memo{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); }
-  .mp-tx-add{
-    display:grid; grid-template-columns:100px 1fr 90px auto; gap:6px; margin-top:10px; align-items:center;
+  .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; }
+  .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
+  .mp-tx-add, .mp-tx-add-personal{
+    display:grid; grid-template-columns:50px 82px 1fr 58px auto; gap:4px; margin-top:10px; align-items:center;
   }
+  .mp-tx-add > *, .mp-tx-add-personal > *{ min-width:0; }
+  .mp-tx-add select, .mp-tx-add input, .mp-tx-add-personal select, .mp-tx-add-personal input{
+    padding:6px 4px; font-size:.74rem;
+  }
+  .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:6px 8px; font-size:.74rem; }
 
   .mp-empty{ color:var(--muted); font-size:.82rem; padding:10px 0; text-align:center; }
 
@@ -391,7 +389,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, showMonthPicker:false };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, showMonthPicker:false, editingLivingTx:null };
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -614,11 +612,13 @@
   function renderLiving(){
     var mk = state.currentMonth;
     var m = getLivingMonth(mk);
-    var spent = m.tx.reduce(function(s,t){ return s + Number(t.amount||0); }, 0);
-    var remain = Number(m.budget||0) - spent;
+    var spent = m.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
+    var received = m.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
+    var remain = Number(m.budget||0) - spent + received;
     var pct = m.budget > 0 ? Math.min(100,(spent/m.budget)*100) : (spent>0?100:0);
     var barClass = spent > m.budget && m.budget>0 ? "over" : (pct>=85?"warn":"");
     var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var editingId = uiFlags.editingLivingTx;
 
     return '<div class="mp-month-switch">' +
         '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
@@ -628,7 +628,7 @@
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">이번 달 생활비</div>' +
-        '<input type="number" inputmode="decimal" data-action="set-living-budget" value="' + m.budget + '" style="font-size:1.6rem;font-weight:750;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
+        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" style="font-size:1.6rem;font-weight:750;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
         '<div class="mp-row-3">' +
           '<div class="mp-stat"><div class="v">' + won(spent) + '</div><div class="k">지출 합계</div></div>' +
           '<div class="mp-stat"><div class="v ' + (remain<0?'neg':'pos') + '">' + won(remain) + '</div><div class="k">잔액</div></div>' +
@@ -638,18 +638,41 @@
       '</section>' +
       '<section class="mp-card">' +
         '<div class="mp-label" style="margin-bottom:6px;">지출 내역</div>' +
-        '<form class="mp-tx-add" data-action="add-living-tx">' +
+        '<form class="mp-tx-add-personal" data-action="add-living-tx">' +
+          '<select name="type">' +
+            '<option value="expense">지출</option>' +
+            '<option value="income">입금</option>' +
+          '</select>' +
           '<input type="date" name="date" value="' + todayISO + '" required>' +
           '<input type="text" name="memo" placeholder="내용">' +
-          '<input type="number" inputmode="decimal" name="amount" placeholder="금액" required min="0" step="1">' +
+          '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
           '<button class="mp-btn small" type="submit">추가</button>' +
         '</form>' +
         '<div class="mp-tx-list">' +
           (txSorted.length ? txSorted.map(function(t){
+            var ty = t.type || "expense";
+            if(editingId === t.id){
+              return '<form class="mp-tx-edit" data-action="save-edit-living-tx" data-id="' + t.id + '">' +
+                '<select name="type">' +
+                  '<option value="expense"' + (ty==="expense"?' selected':'') + '>지출</option>' +
+                  '<option value="income"' + (ty==="income"?' selected':'') + '>입금</option>' +
+                '</select>' +
+                '<input type="date" name="date" value="' + t.date + '" required>' +
+                '<input type="text" name="memo" placeholder="내용" value="' + esc(t.memo||"") + '">' +
+                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
+                '<div class="mp-tx-edit-actions">' +
+                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-living-tx">취소</button>' +
+                  '<button type="submit" class="mp-btn small">저장</button>' +
+                '</div>' +
+              '</form>';
+            }
             return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
               '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-              '<span class="mp-tx-amt">-' + won(t.amount).replace("-","") + '</span>' +
-              '<button class="mp-icon-btn" data-action="delete-living-tx" data-id="' + t.id + '">✕</button>' +
+              '<span class="mp-tx-amt ' + ty + '">' + (ty==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
+              '<span style="display:flex;gap:2px;">' +
+                '<button class="mp-icon-btn" data-action="start-edit-living-tx" data-id="' + t.id + '">✎</button>' +
+                '<button class="mp-icon-btn" data-action="delete-living-tx" data-id="' + t.id + '">✕</button>' +
+              '</span>' +
             '</div>';
           }).join("") : '<div class="mp-empty">이번 달 지출 내역이 없어요</div>') +
         '</div>' +
@@ -733,7 +756,17 @@
     if(action === "delete-living-tx"){
       var lm = getLivingMonth(state.currentMonth);
       lm.tx = lm.tx.filter(function(t){ return t.id !== el.dataset.id; });
+      if(uiFlags.editingLivingTx === el.dataset.id) uiFlags.editingLivingTx = null;
       saveState(); render(); return;
+    }
+
+    if(action === "start-edit-living-tx"){
+      uiFlags.editingLivingTx = el.dataset.id;
+      render(); return;
+    }
+    if(action === "cancel-edit-living-tx"){
+      uiFlags.editingLivingTx = null;
+      render(); return;
     }
 
     if(action === "month-prev"){ state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
@@ -802,7 +835,7 @@
     }
     if(action === "set-living-budget"){
       var lm = getLivingMonth(state.currentMonth);
-      lm.budget = val;
+      lm.budget = parseMoneyValue(el.value);
       saveState(); render(); return;
     }
   });
@@ -890,10 +923,24 @@
     }
 
     if(action === "add-living-tx"){
-      var amt2 = Math.abs(Number(fd.get("amount")) || 0);
+      var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
       var lm = getLivingMonth(state.currentMonth);
-      lm.tx.push({ id: uid(), date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2 });
+      lm.tx.push({ id: uid(), date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense" });
+      saveState(); render(); return;
+    }
+
+    if(action === "save-edit-living-tx"){
+      var lmE = getLivingMonth(state.currentMonth);
+      var txE = lmE.tx.find(function(t){ return t.id === form.dataset.id; });
+      if(!txE) return;
+      var newAmt = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(newAmt <= 0) return;
+      txE.amount = newAmt;
+      txE.type = fd.get("type") || "expense";
+      txE.date = fd.get("date") || txE.date;
+      txE.memo = (fd.get("memo")||"").trim();
+      uiFlags.editingLivingTx = null;
       saveState(); render(); return;
     }
   });
