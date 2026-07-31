@@ -121,16 +121,8 @@
     font-size:.74rem; color:var(--muted); border:none; background:none;
     padding:2px 0; width:100%; font-variant-numeric:tabular-nums; flex:1; min-width:0;
   }
-  .mp-account-number-display{
-    font-size:.74rem; color:var(--muted); font-variant-numeric:tabular-nums;
-    cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; flex:1; min-width:0;
-  }
   .mp-account-purpose-input{
     font-size:.82rem; color:var(--ink); border:none; background:none; padding:2px 0; width:100%;
-  }
-  .mp-account-purpose-display{
-    font-size:.82rem; color:var(--ink); cursor:pointer;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
   }
   .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
   .mp-detail-field{ display:flex; flex-direction:column; gap:2px; }
@@ -155,7 +147,7 @@
   .mp-account-toggle{
     font-size:.75rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0; margin-top:2px;
   }
-  .mp-account:not(.is-expanded) .mp-account-toggle{ font-size:.65rem; }
+  .mp-account-settings-panel{ display:flex; flex-direction:column; gap:10px; }
   .mp-account-detail{
     display:flex; flex-direction:column; gap:10px;
     margin-top:2px; padding-top:10px; border-top:1px solid var(--line);
@@ -425,7 +417,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, editingPurpose:{}, showMonthPicker:false, editingLivingTx:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null };
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -504,14 +496,7 @@
       var sorted = log.slice().sort(function(a,b){ return b.ts - a.ts; });
       var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
       var color = acc.color || "#3182F6";
-      var editingNumber = !!uiFlags.editingAccountNumber[acc.id];
-      var numberField = (editingNumber || !acc.accountNumber) ?
-        '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' :
-        '<span class="mp-account-number-display" data-action="edit-account-number" data-id="' + acc.id + '">' + esc(acc.accountNumber) + '</span>';
-      var editingPurpose = !!uiFlags.editingPurpose[acc.id];
-      var purposeField = (editingPurpose || !acc.purpose) ?
-        '<input type="text" class="mp-account-purpose-input" data-action="set-purpose" data-id="' + acc.id + '" value="' + esc(acc.purpose||"") + '" placeholder="용도 입력 (예: 개인 생활비)">' :
-        '<span class="mp-account-purpose-display" data-action="edit-purpose" data-id="' + acc.id + '">' + esc(acc.purpose) + '</span>';
+      var editingSettings = !!uiFlags.editingSettings[acc.id];
       var cardAction = !expanded ? (' data-action="toggle-log" data-id="' + acc.id + '"') : '';
       var bodyAction = expanded ? (' data-action="toggle-log" data-id="' + acc.id + '"') : '';
 
@@ -521,20 +506,28 @@
           (acc.purpose ? '<div class="mp-account-purpose">' + esc(acc.purpose) + '</div>' : '') +
           '<div class="mp-balance-label">기준 잔액</div>' +
           '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
-          '<span class="mp-account-toggle">' + (expanded ? '접기 ▴' : '▾') + '</span>' +
+          (expanded ? '<span class="mp-account-toggle">접기 ▴</span>' : '') +
         '</div>' +
         (expanded ? (
           '<div class="mp-account-detail">' +
-            '<div class="mp-detail-field"><div class="mp-label">용도</div>' + purposeField + '</div>' +
-            '<div class="mp-detail-field"><div class="mp-label">계좌번호</div>' +
-              '<div class="mp-account-number-row">' + numberField +
-                (acc.accountNumber && !editingNumber ? '<button class="mp-icon-btn" data-action="copy-account-number" data-id="' + acc.id + '" title="계좌번호 복사">⧉</button>' : '') +
-              '</div>' +
-            '</div>' +
-            '<div class="mp-account-settings-row">' +
-              '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
-              '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
-            '</div>' +
+            '<button class="mp-btn ghost small" data-action="toggle-settings" data-id="' + acc.id + '">' + (editingSettings ? '완료' : '수정') + '</button>' +
+            (editingSettings ? (
+              '<div class="mp-account-settings-panel">' +
+                '<div class="mp-detail-field"><div class="mp-label">용도</div>' +
+                  '<input type="text" class="mp-account-purpose-input" data-action="set-purpose" data-id="' + acc.id + '" value="' + esc(acc.purpose||"") + '" placeholder="용도 입력 (예: 개인 생활비)">' +
+                '</div>' +
+                '<div class="mp-detail-field"><div class="mp-label">계좌번호</div>' +
+                  '<div class="mp-account-number-row">' +
+                    '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' +
+                    (acc.accountNumber ? '<button class="mp-icon-btn" data-action="copy-account-number" data-id="' + acc.id + '" title="계좌번호 복사">⧉</button>' : '') +
+                  '</div>' +
+                '</div>' +
+                '<div class="mp-account-settings-row">' +
+                  '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
+                  '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
+                '</div>' +
+              '</div>'
+            ) : "") +
             '<form class="mp-tx-add-personal" data-action="add-tx" data-account="' + acc.id + '">' +
               '<select name="type">' +
                 '<option value="expense">지출</option>' +
@@ -742,18 +735,9 @@
 
     if(action === "show-add-account"){ uiFlags.showAddAccount = true; render(); return; }
 
-    if(action === "edit-account-number"){
-      uiFlags.editingAccountNumber[el.dataset.id] = true;
+    if(action === "toggle-settings"){
+      uiFlags.editingSettings[el.dataset.id] = !uiFlags.editingSettings[el.dataset.id];
       render();
-      var numInput = main.querySelector('.mp-account-number[data-id="' + el.dataset.id + '"]');
-      if(numInput){ numInput.focus(); numInput.setSelectionRange(numInput.value.length, numInput.value.length); }
-      return;
-    }
-    if(action === "edit-purpose"){
-      uiFlags.editingPurpose[el.dataset.id] = true;
-      render();
-      var purInput = main.querySelector('.mp-account-purpose-input[data-id="' + el.dataset.id + '"]');
-      if(purInput){ purInput.focus(); purInput.setSelectionRange(purInput.value.length, purInput.value.length); }
       return;
     }
     if(action === "copy-account-number"){
@@ -865,7 +849,6 @@
       var id = el.dataset.id;
       var acc = state.accounts.find(function(a){ return a.id === id; });
       if(acc) acc.accountNumber = el.value.trim();
-      uiFlags.editingAccountNumber[id] = false;
       saveState(); render();
       return;
     }
@@ -873,7 +856,6 @@
       var id2 = el.dataset.id;
       var acc2 = state.accounts.find(function(a){ return a.id === id2; });
       if(acc2) acc2.purpose = el.value.trim();
-      uiFlags.editingPurpose[id2] = false;
       saveState(); render();
       return;
     }
