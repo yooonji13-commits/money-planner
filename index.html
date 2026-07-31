@@ -92,17 +92,21 @@
 
   /* account cards */
   .mp-accounts-grid{
-    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+    display:grid; grid-template-columns:1fr 1fr; gap:14px;
   }
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
-    border-left-width:4px; border-left-style:solid;
+    border-left-width:4px; border-left-style:solid; border-left-color:var(--acc-color, var(--accent));
     border-radius:var(--radius-lg);
     padding:14px 16px; display:flex; flex-direction:column; gap:8px;
-    aspect-ratio:1/1; overflow:hidden; justify-content:space-between;
+  }
+  .mp-account:not(.is-expanded){
+    aspect-ratio:1/1; overflow:hidden; border-radius:50%;
+    border:3px solid var(--acc-color, var(--accent));
+    padding:14%; justify-content:center; cursor:pointer;
   }
   .mp-account.is-expanded{
-    aspect-ratio:auto; grid-column:1 / -1; overflow:visible;
+    grid-column:1 / -1;
   }
   .mp-color-swatch{
     -webkit-appearance:none; appearance:none; width:22px; height:22px; flex-shrink:0;
@@ -111,27 +115,47 @@
   .mp-color-swatch::-webkit-color-swatch-wrapper{ padding:2px; }
   .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:4px; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mp-account:not(.is-expanded) .mp-account-name{ white-space:normal; overflow:visible; font-size:.82rem; }
+  .mp-account-purpose{ font-size:.72rem; color:var(--muted); }
   .mp-account-number{
     font-size:.74rem; color:var(--muted); border:none; background:none;
-    padding:2px 0; width:100%; font-variant-numeric:tabular-nums;
+    padding:2px 0; width:100%; font-variant-numeric:tabular-nums; flex:1; min-width:0;
   }
   .mp-account-number-display{
     font-size:.74rem; color:var(--muted); font-variant-numeric:tabular-nums;
-    cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
+    cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; flex:1; min-width:0;
   }
+  .mp-account-purpose-input{
+    font-size:.82rem; color:var(--ink); border:none; background:none; padding:2px 0; width:100%;
+  }
+  .mp-account-purpose-display{
+    font-size:.82rem; color:var(--ink); cursor:pointer;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
+  }
+  .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
+  .mp-detail-field{ display:flex; flex-direction:column; gap:2px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
-    display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
-    gap:8px; cursor:pointer; flex:1;
+    display:flex; flex-direction:column; align-items:flex-start;
+    gap:1px; cursor:pointer;
   }
-  .mp-account-balance-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
+  .mp-account:not(.is-expanded) .mp-account-body{
+    align-items:center; text-align:center;
+  }
+  .mp-balance-label{
+    font-size:.62rem; color:var(--muted); font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+    margin-top:4px;
+  }
+  .mp-account:not(.is-expanded) .mp-balance-label{ font-size:.55rem; margin-top:6px; }
   .mp-account-body .mp-balance-edit{
     font-size:1.2rem; font-weight:700; border:none; background:none; padding:2px 0; width:100%;
   }
+  .mp-account:not(.is-expanded) .mp-balance-edit{ font-size:.92rem; text-align:center; }
   .mp-account-toggle{
-    font-size:.75rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
+    font-size:.75rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0; margin-top:2px;
   }
+  .mp-account:not(.is-expanded) .mp-account-toggle{ font-size:.65rem; }
   .mp-account-detail{
     display:flex; flex-direction:column; gap:10px;
     margin-top:2px; padding-top:10px; border-top:1px solid var(--line);
@@ -271,7 +295,8 @@
   }
   .mp-tab svg{ width:21px; height:21px; }
 
-  .mp-add-account-form{ display:flex; gap:8px; margin-top:2px; }
+  .mp-add-account-form{ display:flex; flex-wrap:wrap; gap:8px; margin-top:2px; }
+  .mp-add-account-form input{ min-width:110px; }
 
   ::-webkit-scrollbar{ width:0; height:0; }
 </style>
@@ -315,8 +340,8 @@
       activeTab: "personal",
       currentMonth: currentMonthKey,
       accounts: [
-        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "", color: "#3182F6" },
-        { id: uid(), name: "하나은행", balance: 0, accountNumber: "", color: "#17BF83" }
+        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "", color: "#3182F6", purpose: "" },
+        { id: uid(), name: "하나은행", balance: 0, accountNumber: "", color: "#17BF83", purpose: "" }
       ],
       logs: {},
       familyCategories: [
@@ -400,7 +425,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, showMonthPicker:false, editingLivingTx:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingAccountNumber:{}, editingPurpose:{}, showMonthPicker:false, editingLivingTx:null };
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -466,6 +491,7 @@
     html += uiFlags.showAddAccount ?
       '<form class="mp-add-account-form" data-action="add-account">' +
         '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
+        '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
         '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
         '<button class="mp-btn small" type="submit">추가</button>' +
       '</form>' :
@@ -482,18 +508,29 @@
       var numberField = (editingNumber || !acc.accountNumber) ?
         '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + acc.id + '" value="' + esc(acc.accountNumber||"") + '" placeholder="계좌번호 입력">' :
         '<span class="mp-account-number-display" data-action="edit-account-number" data-id="' + acc.id + '">' + esc(acc.accountNumber) + '</span>';
+      var editingPurpose = !!uiFlags.editingPurpose[acc.id];
+      var purposeField = (editingPurpose || !acc.purpose) ?
+        '<input type="text" class="mp-account-purpose-input" data-action="set-purpose" data-id="' + acc.id + '" value="' + esc(acc.purpose||"") + '" placeholder="용도 입력 (예: 개인 생활비)">' :
+        '<span class="mp-account-purpose-display" data-action="edit-purpose" data-id="' + acc.id + '">' + esc(acc.purpose) + '</span>';
+      var cardAction = !expanded ? (' data-action="toggle-log" data-id="' + acc.id + '"') : '';
+      var bodyAction = expanded ? (' data-action="toggle-log" data-id="' + acc.id + '"') : '';
 
-      html += '<div class="mp-account' + (expanded ? ' is-expanded' : '') + '" style="border-left-color:' + color + ';">' +
-        '<div class="mp-account-body" data-action="toggle-log" data-id="' + acc.id + '">' +
+      html += '<div class="mp-account' + (expanded ? ' is-expanded' : '') + '"' + cardAction + ' style="--acc-color:' + color + ';">' +
+        '<div class="mp-account-body"' + bodyAction + '>' +
           '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
-          '<div class="mp-account-balance-row">' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
-            '<span class="mp-account-toggle">' + (expanded ? '▴' : '▾') + '</span>' +
-          '</div>' +
+          (acc.purpose ? '<div class="mp-account-purpose">' + esc(acc.purpose) + '</div>' : '') +
+          '<div class="mp-balance-label">기준 잔액</div>' +
+          '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+          '<span class="mp-account-toggle">' + (expanded ? '접기 ▴' : '▾') + '</span>' +
         '</div>' +
         (expanded ? (
           '<div class="mp-account-detail">' +
-            numberField +
+            '<div class="mp-detail-field"><div class="mp-label">용도</div>' + purposeField + '</div>' +
+            '<div class="mp-detail-field"><div class="mp-label">계좌번호</div>' +
+              '<div class="mp-account-number-row">' + numberField +
+                (acc.accountNumber && !editingNumber ? '<button class="mp-icon-btn" data-action="copy-account-number" data-id="' + acc.id + '" title="계좌번호 복사">⧉</button>' : '') +
+              '</div>' +
+            '</div>' +
             '<div class="mp-account-settings-row">' +
               '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
               '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
@@ -712,6 +749,34 @@
       if(numInput){ numInput.focus(); numInput.setSelectionRange(numInput.value.length, numInput.value.length); }
       return;
     }
+    if(action === "edit-purpose"){
+      uiFlags.editingPurpose[el.dataset.id] = true;
+      render();
+      var purInput = main.querySelector('.mp-account-purpose-input[data-id="' + el.dataset.id + '"]');
+      if(purInput){ purInput.focus(); purInput.setSelectionRange(purInput.value.length, purInput.value.length); }
+      return;
+    }
+    if(action === "copy-account-number"){
+      var accCopy = state.accounts.find(function(a){ return a.id === el.dataset.id; });
+      if(!accCopy || !accCopy.accountNumber) return;
+      var text = accCopy.accountNumber;
+      var fallbackCopy = function(){
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try{ document.execCommand("copy"); }catch(err){}
+        document.body.removeChild(ta);
+      };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+      var original = el.textContent;
+      el.textContent = "✓";
+      setTimeout(function(){ el.textContent = original; }, 1200);
+      return;
+    }
     if(action === "show-add-category"){ uiFlags.showAddCategory = true; render(); return; }
 
     if(action === "delete-account"){
@@ -788,7 +853,7 @@
   root.addEventListener("keydown", function(e){
     if(e.key !== "Enter") return;
     var el = e.target;
-    if(el.classList && el.classList.contains("mp-account-number")){
+    if(el.classList && (el.classList.contains("mp-account-number") || el.classList.contains("mp-account-purpose-input"))){
       e.preventDefault();
       el.blur();
     }
@@ -796,12 +861,22 @@
 
   root.addEventListener("focusout", function(e){
     var el = e.target;
-    if(!el.classList || !el.classList.contains("mp-account-number")) return;
-    var id = el.dataset.id;
-    var acc = state.accounts.find(function(a){ return a.id === id; });
-    if(acc) acc.accountNumber = el.value.trim();
-    uiFlags.editingAccountNumber[id] = false;
-    saveState(); render();
+    if(el.classList && el.classList.contains("mp-account-number")){
+      var id = el.dataset.id;
+      var acc = state.accounts.find(function(a){ return a.id === id; });
+      if(acc) acc.accountNumber = el.value.trim();
+      uiFlags.editingAccountNumber[id] = false;
+      saveState(); render();
+      return;
+    }
+    if(el.classList && el.classList.contains("mp-account-purpose-input")){
+      var id2 = el.dataset.id;
+      var acc2 = state.accounts.find(function(a){ return a.id === id2; });
+      if(acc2) acc2.purpose = el.value.trim();
+      uiFlags.editingPurpose[id2] = false;
+      saveState(); render();
+      return;
+    }
   });
 
   root.addEventListener("input", function(e){
@@ -870,9 +945,10 @@
       var name = (fd.get("name")||"").trim();
       if(!name) return;
       var accountNumber = (fd.get("accountNumber")||"").trim();
+      var purpose = (fd.get("purpose")||"").trim();
       var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
       var color = palette[state.accounts.length % palette.length];
-      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color });
+      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color, purpose: purpose });
       uiFlags.showAddAccount = false;
       saveState(); render(); return;
     }
