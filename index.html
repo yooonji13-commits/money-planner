@@ -117,7 +117,7 @@
   .mp-account-name-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-account:not(.is-expanded) .mp-account-name{ white-space:normal; overflow:visible; font-size:.82rem; }
-  .mp-edit-icon{ font-size:.7rem; padding:2px 5px; flex-shrink:0; }
+  .mp-edit-icon{ font-size:.88rem; padding:4px 7px; flex-shrink:0; }
   .mp-account-purpose{ font-size:.72rem; color:var(--muted); }
   .mp-account-number{
     font-size:.74rem; color:var(--muted); border:none; background:none;
@@ -488,6 +488,7 @@
         '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
         '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
         '<button class="mp-btn small" type="submit">추가</button>' +
+        '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
       '</form>' :
       '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
 
@@ -741,6 +742,7 @@
     var action = el.dataset.action;
 
     if(action === "show-add-account"){ uiFlags.showAddAccount = true; render(); return; }
+    if(action === "cancel-add-account"){ uiFlags.showAddAccount = false; render(); return; }
 
     if(action === "toggle-settings"){
       uiFlags.editingSettings[el.dataset.id] = !uiFlags.editingSettings[el.dataset.id];
@@ -784,10 +786,16 @@
     }
 
     if(action === "toggle-log"){
-      var willExpand = !uiFlags.expandedAccounts[el.dataset.id];
+      var toggleId = el.dataset.id;
+      var pendingInput = main.querySelector('.mp-balance-edit[data-id="' + toggleId + '"]');
+      if(pendingInput){
+        var pendingAcc = state.accounts.find(function(a){ return a.id === toggleId; });
+        if(pendingAcc) pendingAcc.balance = parseMoneyValue(pendingInput.value);
+      }
+      var willExpand = !uiFlags.expandedAccounts[toggleId];
       if(willExpand) uiFlags.expandedAccounts = {};
-      uiFlags.expandedAccounts[el.dataset.id] = willExpand;
-      render(); return;
+      uiFlags.expandedAccounts[toggleId] = willExpand;
+      saveState(); render(); return;
     }
     if(action === "toggle-category"){
       uiFlags.expandedCategories[el.dataset.id] = !uiFlags.expandedCategories[el.dataset.id];
