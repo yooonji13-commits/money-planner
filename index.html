@@ -178,6 +178,7 @@
   .mp-tx-edit{
     display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; border-top:1px solid var(--line);
   }
+  .mp-tx-edit select, .mp-tx-edit input{ height:32px; box-sizing:border-box; padding:0 8px; }
   .mp-tx-edit .mp-tx-edit-actions{ grid-column:1 / -1; display:flex; gap:6px; justify-content:flex-end; }
 
   /* month switcher */
@@ -232,9 +233,9 @@
   }
   .mp-tx-add > *, .mp-tx-add-personal > *{ min-width:0; }
   .mp-tx-add select, .mp-tx-add input, .mp-tx-add-personal select, .mp-tx-add-personal input{
-    padding:6px 4px; font-size:.74rem;
+    padding:0 4px; font-size:.74rem; height:32px; box-sizing:border-box;
   }
-  .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:6px 8px; font-size:.74rem; }
+  .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
 
   .mp-empty{ color:var(--muted); font-size:.82rem; padding:10px 0; text-align:center; }
 
