@@ -846,7 +846,7 @@
   root.addEventListener("keydown", function(e){
     if(e.key !== "Enter") return;
     var el = e.target;
-    if(el.classList && (el.classList.contains("mp-account-number") || el.classList.contains("mp-account-purpose-input"))){
+    if(el.classList && (el.classList.contains("mp-account-number") || el.classList.contains("mp-account-purpose-input") || el.classList.contains("mp-balance-edit"))){
       e.preventDefault();
       el.blur();
     }
