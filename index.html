@@ -110,27 +110,33 @@
   }
   .mp-color-swatch::-webkit-color-swatch-wrapper{ padding:2px; }
   .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:4px; }
-  .mp-account-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-account-number{
     font-size:.74rem; color:var(--muted); border:none; background:none;
-    padding:2px 0; width:100%; margin-top:1px; font-variant-numeric:tabular-nums;
+    padding:2px 0; width:100%; font-variant-numeric:tabular-nums;
   }
   .mp-account-number-display{
-    font-size:.74rem; color:var(--muted); margin-top:1px; font-variant-numeric:tabular-nums;
+    font-size:.74rem; color:var(--muted); font-variant-numeric:tabular-nums;
     cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
   }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
-    display:flex; flex-direction:column; align-items:flex-start; gap:2px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+    gap:8px; cursor:pointer; flex:1;
   }
+  .mp-account-balance-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
   .mp-account-body .mp-balance-edit{
     font-size:1.2rem; font-weight:700; border:none; background:none; padding:2px 0; width:100%;
   }
   .mp-account-toggle{
-    font-size:.72rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
+    font-size:.75rem; color:var(--muted); font-weight:600; white-space:nowrap; flex-shrink:0;
   }
+  .mp-account-detail{
+    display:flex; flex-direction:column; gap:10px;
+    margin-top:2px; padding-top:10px; border-top:1px solid var(--line);
+  }
+  .mp-account-settings-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .mp-icon-btn{
     background:none; border:none; color:var(--muted); font-size:.78rem; padding:4px 6px;
     border-radius:var(--radius-sm); cursor:pointer;
@@ -478,58 +484,58 @@
         '<span class="mp-account-number-display" data-action="edit-account-number" data-id="' + acc.id + '">' + esc(acc.accountNumber) + '</span>';
 
       html += '<div class="mp-account' + (expanded ? ' is-expanded' : '') + '" style="border-left-color:' + color + ';">' +
-        '<div class="mp-account-top">' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
-            numberField +
-          '</div>' +
-          '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
-          '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
-        '</div>' +
         '<div class="mp-account-body" data-action="toggle-log" data-id="' + acc.id + '">' +
-          '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
-          '<span class="mp-account-toggle">' +
-            (expanded ? '접기 ▴' : (log.length ? '내역 ' + log.length + '건 · 입력하기 ▾' : '내역 입력하기 ▾')) +
-          '</span>' +
+          '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
+          '<div class="mp-account-balance-row">' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+            '<span class="mp-account-toggle">' + (expanded ? '▴' : '▾') + '</span>' +
+          '</div>' +
         '</div>' +
         (expanded ? (
-          '<form class="mp-tx-add-personal" data-action="add-tx" data-account="' + acc.id + '">' +
-            '<select name="type">' +
-              '<option value="expense">지출</option>' +
-              '<option value="income">입금</option>' +
-            '</select>' +
-            '<input type="date" name="date" value="' + todayISO + '" required>' +
-            '<input type="text" name="memo" placeholder="메모">' +
-            '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
-            '<button class="mp-btn small" type="submit">추가</button>' +
-          '</form>' +
-          (log.length ?
-          '<div class="mp-log">' +
-            sorted.map(function(t){
-              if(editing === t.id){
-                return '<form class="mp-tx-edit" data-action="save-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">' +
-                  '<select name="type">' +
-                    '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
-                    '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
-                  '</select>' +
-                  '<input type="date" name="date" value="' + t.date + '" required>' +
-                  '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
-                  '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
-                  '<div class="mp-tx-edit-actions">' +
-                    '<button type="button" class="mp-icon-btn" data-action="cancel-edit-tx">취소</button>' +
-                    '<button type="submit" class="mp-btn small">저장</button>' +
-                  '</div>' +
-                '</form>';
-              }
-              return '<div class="mp-log-row"><span class="mp-log-meta">' + fmtDateShort(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span>' +
-                '<span class="mp-log-actions">' +
-                '<span class="mp-log-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
-                '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✎</button>' +
-                '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✕</button>' +
-                '</span></div>';
-            }).join("") +
+          '<div class="mp-account-detail">' +
+            numberField +
+            '<div class="mp-account-settings-row">' +
+              '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + acc.id + '" value="' + color + '" title="카드 색상">' +
+              '<button class="mp-icon-btn" data-action="delete-account" data-id="' + acc.id + '">삭제</button>' +
+            '</div>' +
+            '<form class="mp-tx-add-personal" data-action="add-tx" data-account="' + acc.id + '">' +
+              '<select name="type">' +
+                '<option value="expense">지출</option>' +
+                '<option value="income">입금</option>' +
+              '</select>' +
+              '<input type="date" name="date" value="' + todayISO + '" required>' +
+              '<input type="text" name="memo" placeholder="메모">' +
+              '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+              '<button class="mp-btn small" type="submit">추가</button>' +
+            '</form>' +
+            (log.length ?
+            '<div class="mp-log">' +
+              sorted.map(function(t){
+                if(editing === t.id){
+                  return '<form class="mp-tx-edit" data-action="save-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">' +
+                    '<select name="type">' +
+                      '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
+                      '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
+                    '</select>' +
+                    '<input type="date" name="date" value="' + t.date + '" required>' +
+                    '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
+                    '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
+                    '<div class="mp-tx-edit-actions">' +
+                      '<button type="button" class="mp-icon-btn" data-action="cancel-edit-tx">취소</button>' +
+                      '<button type="submit" class="mp-btn small">저장</button>' +
+                    '</div>' +
+                  '</form>';
+                }
+                return '<div class="mp-log-row"><span class="mp-log-meta">' + fmtDateShort(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span>' +
+                  '<span class="mp-log-actions">' +
+                  '<span class="mp-log-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
+                  '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✎</button>' +
+                  '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✕</button>' +
+                  '</span></div>';
+              }).join("") +
+            '</div>'
+            : '<div class="mp-empty">아직 기록이 없어요</div>') +
           '</div>'
-          : '<div class="mp-empty">아직 기록이 없어요</div>')
         ) : "") +
       '</div>';
     });
