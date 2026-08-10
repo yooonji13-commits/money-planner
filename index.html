@@ -348,10 +348,7 @@
     return {
       activeTab: "personal",
       currentMonth: currentMonthKey,
-      accounts: [
-        { id: uid(), name: "카카오뱅크", balance: 0, accountNumber: "", color: "#3182F6", purpose: "" },
-        { id: uid(), name: "하나은행", balance: 0, accountNumber: "", color: "#17BF83", purpose: "" }
-      ],
+      accounts: [],
       logs: {},
       familyCategories: [
         { id: uid(), name: "식비" },
@@ -616,6 +613,9 @@
       '</div>';
     });
     html += '</div>';
+    if(!accountsToShow.length){
+      html += '<div class="mp-empty">등록된 계좌가 없어요. "+ 계좌 추가"로 시작해보세요.</div>';
+    }
 
     return html;
   }
