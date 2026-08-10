@@ -795,6 +795,7 @@
       var willExpand = !uiFlags.expandedAccounts[toggleId];
       if(willExpand) uiFlags.expandedAccounts = {};
       uiFlags.expandedAccounts[toggleId] = willExpand;
+      if(!willExpand) uiFlags.editingSettings[toggleId] = false;
       saveState(); render(); return;
     }
     if(action === "toggle-category"){
