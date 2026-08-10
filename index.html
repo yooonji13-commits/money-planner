@@ -250,9 +250,6 @@
   .mp-progress.warn > div{ background:var(--warning); }
   .mp-progress.over > div{ background:var(--negative); }
   .mp-carry-btn{ margin-top:12px; }
-  .mp-carry-note{
-    margin-top:12px; text-align:center; font-size:.8rem; color:var(--positive); font-weight:650;
-  }
 
   .mp-row-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
   .mp-stat{ display:flex; flex-direction:column; gap:2px; }
@@ -741,9 +738,7 @@
           '<div class="mp-stat"><div class="v">' + m.tx.length + '건</div><div class="k">내역 수</div></div>' +
         '</div>' +
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
-        (m.carriedOver ?
-          '<div class="mp-carry-note">✓ 다음 달로 이월됨</div>' :
-          (remain > 0 ? '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>' : "")) +
+        '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>' +
       '</section>' +
     '</div>' +
       '<section class="mp-card">' +
@@ -860,7 +855,7 @@
     if(action === "carry-over-next-month"){
       var srcKey = state.currentMonth;
       var srcMonth = getLivingMonth(srcKey);
-      if(srcMonth.carriedOver) return;
+      if(srcMonth.carriedOver){ alert("이미 이번 달 잔액을 다음 달로 이월했어요."); return; }
       var spentX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
       var receivedX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
       var remainX = Number(srcMonth.budget||0) - spentX + receivedX;
