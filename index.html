@@ -64,6 +64,12 @@
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
 
+  .mp-personal-sticky{
+    position:sticky; top:var(--mp-header-h, 60px); z-index:4;
+    background:var(--bg); display:flex; flex-direction:column; gap:12px;
+    padding-top:2px; padding-bottom:2px; margin-top:-2px;
+  }
+
   .mp-card{
     background:var(--surface);
     border:1px solid var(--line);
@@ -299,7 +305,7 @@
 </head>
 <body>
 <div id="mp-root">
-  <header class="mp-header">
+  <header class="mp-header" id="mp-header">
     <div class="mp-date" id="mp-headerdate"></div>
   </header>
   <main class="mp-main" id="mp-main"></main>
@@ -464,6 +470,13 @@
     return (negative ? -1 : 1) * Number(digits);
   }
 
+  var appHeader = document.getElementById("mp-header");
+  function updateStickyOffset(){
+    if(appHeader) document.documentElement.style.setProperty("--mp-header-h", appHeader.offsetHeight + "px");
+  }
+  window.addEventListener("resize", updateStickyOffset);
+  window.addEventListener("orientationchange", updateStickyOffset);
+
   function render(){
     headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
     document.querySelectorAll(".mp-tab").forEach(function(btn){
@@ -472,32 +485,34 @@
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderFamily();
     else main.innerHTML = renderLiving();
+    updateStickyOffset();
   }
 
   // ---------- 개인 탭 ----------
   function renderPersonal(){
     var total = state.accounts.reduce(function(s,a){ return s + Number(a.balance||0); }, 0);
     var html = "";
-    html += '<section class="mp-card mp-hero">' +
-      '<div class="mp-label">총 보유자산</div>' +
-      '<div class="mp-total ' + (total<0?"neg":"pos") + '">' + won(total) + '</div>' +
-      '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
-      '</section>';
-
     var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
     var accountsToShow = expandedAccountId ? state.accounts.filter(function(a){ return a.id === expandedAccountId; }) : state.accounts;
 
-    html += expandedAccountId ?
-      '<button class="mp-btn ghost block" data-action="toggle-log" data-id="' + expandedAccountId + '">← 뒤로가기</button>' :
-      (uiFlags.showAddAccount ?
-        '<form class="mp-add-account-form" data-action="add-account">' +
-          '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
-          '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
-          '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
-          '<button class="mp-btn small" type="submit">추가</button>' +
-          '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
-        '</form>' :
-        '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>');
+    html += '<div class="mp-personal-sticky">' +
+      '<section class="mp-card mp-hero">' +
+        '<div class="mp-label">총 보유자산</div>' +
+        '<div class="mp-total ' + (total<0?"neg":"pos") + '">' + won(total) + '</div>' +
+        '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
+      '</section>' +
+      (expandedAccountId ?
+        '<button class="mp-btn ghost block" data-action="toggle-log" data-id="' + expandedAccountId + '">← 뒤로가기</button>' :
+        (uiFlags.showAddAccount ?
+          '<form class="mp-add-account-form" data-action="add-account">' +
+            '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
+            '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
+            '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
+            '<button class="mp-btn small" type="submit">추가</button>' +
+            '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
+          '</form>' :
+          '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>')) +
+    '</div>';
 
     html += '<div class="mp-accounts-grid">';
     accountsToShow.forEach(function(acc){
