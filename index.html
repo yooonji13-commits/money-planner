@@ -294,7 +294,8 @@
   .mp-tx-row .mp-tx-memo{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; text-align:right; }
   .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
-  .mp-tx-row.is-reflected{ opacity:.45; cursor:pointer; }
+  .mp-tx-row.is-reflected{ opacity:.45; }
+  .mp-tx-row.is-reflected .mp-tx-date{ cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }
   .mp-reflect-btn{ color:var(--accent); font-weight:700; font-size:.7rem; }
   @keyframes mp-reflect-pulse{
     0%{ background:var(--accent-soft); opacity:1; transform:scale(1.02); }
@@ -716,7 +717,7 @@
                 '</div>' +
               '</form>';
             }
-            return '<div class="mp-tx-row' + (t.reflected ? ' is-reflected' : '') + (uiFlags.justReflected === t.id ? ' mp-just-reflected' : '') + '" data-account="' + expandedAcc.id + '" data-id="' + t.id + '"' + (t.reflected ? ' title="두 번 클릭하면 반영이 취소돼요"' : '') + '><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
+            return '<div class="mp-tx-row' + (t.reflected ? ' is-reflected' : '') + (uiFlags.justReflected === t.id ? ' mp-just-reflected' : '') + '" data-account="' + expandedAcc.id + '" data-id="' + t.id + '"><span class="mp-tx-date"' + (t.reflected ? ' title="두 번 클릭하면 반영이 취소돼요"' : '') + '>' + fmtDateShort(t.date) + '</span>' +
               '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
               '<span class="mp-tx-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
               '<span style="display:flex;gap:2px;">' +
@@ -1168,15 +1169,21 @@
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
   });
 
-  root.addEventListener("dblclick", function(e){
-    if(e.target.closest("button, input, select, a")) return;
-    var row = e.target.closest(".mp-tx-row.is-reflected");
-    if(!row) return;
-    var log = getLog(row.dataset.account);
-    var tx = log.find(function(t){ return t.id === row.dataset.id; });
-    if(!tx) return;
-    tx.reflected = false;
-    saveState(); render(); return;
+  var lastDateTap = { id: null, time: 0 };
+  root.addEventListener("click", function(e){
+    var dateEl = e.target.closest(".mp-tx-row.is-reflected .mp-tx-date");
+    if(!dateEl) return;
+    var row = dateEl.closest(".mp-tx-row");
+    var key = row.dataset.account + ":" + row.dataset.id;
+    var now = Date.now();
+    if(lastDateTap.key === key && (now - lastDateTap.time) < 600){
+      lastDateTap = { key: null, time: 0 };
+      var log = getLog(row.dataset.account);
+      var tx = log.find(function(t){ return t.id === row.dataset.id; });
+      if(tx){ tx.reflected = false; saveState(); render(); }
+      return;
+    }
+    lastDateTap = { key: key, time: now };
   });
 
   root.addEventListener("keydown", function(e){
