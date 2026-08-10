@@ -743,7 +743,7 @@
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
         (m.carriedOver ?
           '<div class="mp-carry-note">✓ 다음 달로 이월됨</div>' :
-          '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>') +
+          (remain > 0 ? '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>' : "")) +
       '</section>' +
     '</div>' +
       '<section class="mp-card">' +
@@ -864,7 +864,7 @@
       var spentX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
       var receivedX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
       var remainX = Number(srcMonth.budget||0) - spentX + receivedX;
-      if(remainX === 0){ alert("이월할 잔액이 없어요."); return; }
+      if(remainX <= 0){ alert("이월할 잔액이 없어요."); return; }
       if(!confirm(monthLabel(srcKey) + '의 잔액 ' + won(remainX) + '을(를) 다음 달로 이월할까요?')) return;
       var nextKey = shiftMonth(srcKey, 1);
       var nextMonth = getLivingMonth(nextKey);
@@ -872,8 +872,8 @@
         id: uid(),
         date: lastDayOfMonth(srcKey),
         memo: monthLabel(srcKey) + ' 이월',
-        amount: Math.abs(remainX),
-        type: remainX >= 0 ? "income" : "expense"
+        amount: remainX,
+        type: "income"
       });
       srcMonth.carriedOver = true;
       saveState(); render();
