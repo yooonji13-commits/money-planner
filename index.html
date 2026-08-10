@@ -60,11 +60,14 @@
     display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
   .mp-header .mp-date{
-    font-size:.95rem; color:var(--ink); font-weight:700; letter-spacing:-0.01em;
+    font-size:.86rem; color:var(--ink); font-weight:700; letter-spacing:-0.01em; flex-shrink:1; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
+  .mp-header-actions{ display:flex; gap:5px; flex-shrink:0; }
   .mp-reset-btn{
     font-family:var(--font-ui); background:none; border:1px solid var(--line); color:var(--muted);
-    border-radius:999px; padding:5px 11px; font-size:.72rem; font-weight:650; cursor:pointer; flex-shrink:0;
+    border-radius:999px; padding:5px 9px; font-size:.68rem; font-weight:650; cursor:pointer; flex-shrink:0;
+    white-space:nowrap;
   }
   .mp-reset-btn:hover{ color:var(--negative); border-color:var(--negative); }
 
@@ -317,7 +320,12 @@
 <div id="mp-root">
   <header class="mp-header" id="mp-header">
     <div class="mp-date" id="mp-headerdate"></div>
-    <button class="mp-reset-btn" data-action="reset-all" type="button">초기화</button>
+    <div class="mp-header-actions">
+      <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
+      <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
+      <button class="mp-reset-btn" data-action="reset-all" type="button">초기화</button>
+    </div>
+    <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
@@ -852,6 +860,26 @@
       return;
     }
 
+    if(action === "export-data"){
+      var exportStr = localStorage.getItem(STORAGE_KEY) || JSON.stringify(state);
+      var blob = new Blob([exportStr], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "moneyplanner-backup-" + todayISO + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      return;
+    }
+
+    if(action === "trigger-import"){
+      var fileInput = document.getElementById("mp-import-input");
+      if(fileInput) fileInput.click();
+      return;
+    }
+
     if(action === "carry-over-next-month"){
       var srcKey = state.currentMonth;
       var srcMonth = getLivingMonth(srcKey);
@@ -1203,6 +1231,50 @@
       saveState(); render(); return;
     }
   });
+
+  var importInput = document.getElementById("mp-import-input");
+  if(importInput){
+    importInput.addEventListener("change", function(e){
+      var file = e.target.files && e.target.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(evt){
+        var imported;
+        try{
+          imported = JSON.parse(evt.target.result);
+        }catch(err){
+          alert("파일을 읽을 수 없어요. 올바른 백업 파일인지 확인해주세요.");
+          importInput.value = "";
+          return;
+        }
+        if(!imported || typeof imported !== "object" || !Array.isArray(imported.accounts)){
+          alert("올바른 백업 파일이 아니에요.");
+          importInput.value = "";
+          return;
+        }
+        if(!confirm("지금 있는 데이터를 지우고 이 백업 파일 내용으로 덮어쓸까요? 되돌릴 수 없어요.")){
+          importInput.value = "";
+          return;
+        }
+        var d = defaultState();
+        var merged = Object.assign(d, imported, {
+          accounts: imported.accounts || d.accounts,
+          logs: imported.logs || {},
+          familyCategories: imported.familyCategories || d.familyCategories,
+          familyData: imported.familyData || {},
+          living: imported.living || {},
+          loans: imported.loans || []
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        location.reload();
+      };
+      reader.onerror = function(){
+        alert("파일을 읽는 중 문제가 생겼어요.");
+        importInput.value = "";
+      };
+      reader.readAsText(file);
+    });
+  }
 
   render();
 })();
