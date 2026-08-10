@@ -197,6 +197,12 @@
 
   .mp-log-toggle{ font-size:.78rem; color:var(--accent); background:none; border:none; cursor:pointer; text-align:left; padding:0; font-weight:600; }
   .mp-log{ display:flex; flex-direction:column; margin-top:2px; }
+  .mp-sort-toggle{ display:flex; gap:6px; margin-top:8px; }
+  .mp-sort-btn{
+    font-family:var(--font-ui); background:var(--surface-alt); color:var(--muted); border:1px solid var(--line);
+    border-radius:999px; padding:4px 11px; font-size:.72rem; font-weight:650; cursor:pointer;
+  }
+  .mp-sort-btn.active{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent-soft); }
   .mp-tx-edit{
     display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; border-top:1px solid var(--line);
   }
@@ -413,7 +419,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc" };
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -495,7 +501,11 @@
     accountsToShow.forEach(function(acc){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
-      var sorted = log.slice().sort(function(a,b){ var d = b.date.localeCompare(a.date); return d !== 0 ? d : (b.ts - a.ts); });
+      var sortDesc = uiFlags.logSortOrder !== "asc";
+      var sorted = log.slice().sort(function(a,b){
+        var d = sortDesc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
+        return d !== 0 ? d : (sortDesc ? b.ts - a.ts : a.ts - b.ts);
+      });
       var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
       var color = acc.color || "#3182F6";
       var editingSettings = !!uiFlags.editingSettings[acc.id];
@@ -543,6 +553,10 @@
               '<button class="mp-btn small" type="submit">추가</button>' +
             '</form>' +
             (log.length ?
+            '<div class="mp-sort-toggle">' +
+              '<button class="mp-sort-btn' + (sortDesc ? ' active' : '') + '" data-action="set-log-sort" data-order="desc">최신순</button>' +
+              '<button class="mp-sort-btn' + (!sortDesc ? ' active' : '') + '" data-action="set-log-sort" data-order="asc">과거순</button>' +
+            '</div>' +
             '<div class="mp-log">' +
               sorted.map(function(t){
                 if(editing === t.id){
@@ -814,6 +828,10 @@
 
     if(action === "start-edit-tx"){
       uiFlags.editingTx = { accountId: el.dataset.account, txId: el.dataset.id };
+      render(); return;
+    }
+    if(action === "set-log-sort"){
+      uiFlags.logSortOrder = el.dataset.order;
       render(); return;
     }
     if(action === "cancel-edit-tx"){
