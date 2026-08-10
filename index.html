@@ -196,13 +196,7 @@
   .mp-btn.small{ padding:6px 12px; font-size:.78rem; }
 
   .mp-log-toggle{ font-size:.78rem; color:var(--accent); background:none; border:none; cursor:pointer; text-align:left; padding:0; font-weight:600; }
-  .mp-log{ display:flex; flex-direction:column; gap:6px; margin-top:2px; }
-  .mp-log-row{ display:flex; justify-content:space-between; align-items:center; font-size:.82rem; padding:6px 0; border-top:1px solid var(--line); }
-  .mp-log-row .mp-log-meta{ color:var(--muted); }
-  .mp-log-amt{ font-variant-numeric:tabular-nums; font-weight:600; }
-  .mp-log-amt.income{ color:var(--positive); }
-  .mp-log-amt.expense{ color:var(--negative); }
-  .mp-log-actions{ display:flex; align-items:center; gap:2px; }
+  .mp-log{ display:flex; flex-direction:column; margin-top:2px; }
   .mp-tx-edit{
     display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; border-top:1px solid var(--line);
   }
@@ -248,13 +242,13 @@
 
   .mp-tx-list{ display:flex; flex-direction:column; }
   .mp-tx-row{
-    display:grid; grid-template-columns:56px 1fr auto auto; gap:6px; align-items:center;
+    display:grid; grid-template-columns:38px 1fr 84px auto; gap:6px; align-items:center;
     padding:9px 0; border-top:1px solid var(--line); font-size:.85rem;
   }
   .mp-tx-row > *{ min-width:0; }
   .mp-tx-row .mp-tx-date{ color:var(--muted); font-size:.72rem; font-variant-numeric:tabular-nums; }
   .mp-tx-row .mp-tx-memo{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; }
+  .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; text-align:right; }
   .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
   .mp-tx-add, .mp-tx-add-personal{
     display:grid; grid-template-columns:42px 96px 1fr 50px auto; gap:6px; margin-top:10px; align-items:center;
@@ -482,24 +476,26 @@
       '<div class="mp-sub">' + state.accounts.length + '개 계좌</div>' +
       '</section>';
 
-    html += uiFlags.showAddAccount ?
-      '<form class="mp-add-account-form" data-action="add-account">' +
-        '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
-        '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
-        '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
-        '<button class="mp-btn small" type="submit">추가</button>' +
-        '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
-      '</form>' :
-      '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>';
-
     var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
     var accountsToShow = expandedAccountId ? state.accounts.filter(function(a){ return a.id === expandedAccountId; }) : state.accounts;
+
+    html += expandedAccountId ?
+      '<button class="mp-btn ghost block" data-action="toggle-log" data-id="' + expandedAccountId + '">← 뒤로가기</button>' :
+      (uiFlags.showAddAccount ?
+        '<form class="mp-add-account-form" data-action="add-account">' +
+          '<input type="text" name="name" placeholder="계좌/현금 이름" required style="flex:1;">' +
+          '<input type="text" name="purpose" placeholder="용도 (예: 개인 생활비)" style="flex:1;">' +
+          '<input type="text" name="accountNumber" placeholder="계좌번호 (선택)" style="flex:1;">' +
+          '<button class="mp-btn small" type="submit">추가</button>' +
+          '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
+        '</form>' :
+        '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>');
 
     html += '<div class="mp-accounts-grid">';
     accountsToShow.forEach(function(acc){
       var log = getLog(acc.id);
       var expanded = !!uiFlags.expandedAccounts[acc.id];
-      var sorted = log.slice().sort(function(a,b){ return b.ts - a.ts; });
+      var sorted = log.slice().sort(function(a,b){ var d = b.date.localeCompare(a.date); return d !== 0 ? d : (b.ts - a.ts); });
       var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === acc.id ? uiFlags.editingTx.txId : null;
       var color = acc.color || "#3182F6";
       var editingSettings = !!uiFlags.editingSettings[acc.id];
@@ -564,9 +560,10 @@
                     '</div>' +
                   '</form>';
                 }
-                return '<div class="mp-log-row"><span class="mp-log-meta">' + fmtDateShort(t.date) + (t.memo ? ' · ' + esc(t.memo) : '') + '</span>' +
-                  '<span class="mp-log-actions">' +
-                  '<span class="mp-log-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
+                return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
+                  '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
+                  '<span class="mp-tx-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
+                  '<span style="display:flex;gap:2px;">' +
                   '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✎</button>' +
                   '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + acc.id + '" data-id="' + t.id + '">✕</button>' +
                   '</span></div>';
