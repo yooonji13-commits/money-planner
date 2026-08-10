@@ -64,7 +64,7 @@
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
 
-  .mp-personal-sticky{
+  .mp-tab-sticky{
     position:sticky; top:var(--mp-header-h, 60px); z-index:4;
     background:var(--bg); display:flex; flex-direction:column; gap:12px;
     padding-top:2px; padding-bottom:2px; margin-top:-2px;
@@ -134,6 +134,9 @@
   }
   .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
   .mp-detail-field{ display:flex; flex-direction:column; gap:2px; }
+  .mp-loan-card{ border-left-width:4px; border-left-style:solid; }
+  .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .mp-loan-input{ width:100%; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -314,13 +317,17 @@
       <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c1.2-4 4-6 7.5-6s6.3 2 7.5 6"/></svg></span>
       개인
     </button>
-    <button class="mp-tab" data-tab="family">
-      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8.5" cy="7.5" r="2.6"/><circle cx="16" cy="8.5" r="2.1"/><path d="M3 19c.8-3.4 2.8-5.2 5.5-5.2S13 15.6 13.8 19"/><path d="M14 19c.6-2.6 2-4 4-4s3.3 1.4 3.8 4"/></svg></span>
-      가족
-    </button>
     <button class="mp-tab" data-tab="living">
       <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4.5" y="4" width="15" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h4"/></svg></span>
       생활비
+    </button>
+    <button class="mp-tab" data-tab="family">
+      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8.5" cy="7.5" r="2.6"/><circle cx="16" cy="8.5" r="2.1"/><path d="M3 19c.8-3.4 2.8-5.2 5.5-5.2S13 15.6 13.8 19"/><path d="M14 19c.6-2.6 2-4 4-4s3.3 1.4 3.8 4"/></svg></span>
+      집안행사
+    </button>
+    <button class="mp-tab" data-tab="loan">
+      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/></svg></span>
+      대출
     </button>
   </nav>
 </div>
@@ -354,7 +361,8 @@
         { id: uid(), name: "구독" }
       ],
       familyData: {},
-      living: {}
+      living: {},
+      loans: []
     };
   }
 
@@ -369,7 +377,8 @@
         logs: parsed.logs || {},
         familyCategories: parsed.familyCategories || d.familyCategories,
         familyData: parsed.familyData || {},
-        living: parsed.living || {}
+        living: parsed.living || {},
+        loans: parsed.loans || []
       });
     }catch(e){
       return defaultState();
@@ -427,7 +436,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc" };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false };
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -484,6 +493,7 @@
     });
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderFamily();
+    else if(state.activeTab === "loan") main.innerHTML = renderLoan();
     else main.innerHTML = renderLiving();
     updateStickyOffset();
   }
@@ -495,7 +505,7 @@
     var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
     var accountsToShow = expandedAccountId ? state.accounts.filter(function(a){ return a.id === expandedAccountId; }) : state.accounts;
 
-    html += '<div class="mp-personal-sticky">' +
+    html += '<div class="mp-tab-sticky">' +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">총 보유자산</div>' +
         '<div class="mp-total ' + (total<0?"neg":"pos") + '">' + won(total) + '</div>' +
@@ -665,7 +675,7 @@
 
     return '<div class="mp-month-switch">' +
         '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
-        '<div class="mp-month-label">' + monthLabel(mk) + ' 가족 플랜</div>' +
+        '<div class="mp-month-label">' + monthLabel(mk) + ' 집안행사</div>' +
         '<button class="mp-month-btn" data-action="month-next">›</button>' +
       '</div>' +
       '<section class="mp-card mp-hero">' +
@@ -697,7 +707,8 @@
     var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
     var editingId = uiFlags.editingLivingTx;
 
-    return '<div class="mp-month-switch">' +
+    return '<div class="mp-tab-sticky">' +
+      '<div class="mp-month-switch">' +
         '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
         '<div class="mp-month-label" data-action="toggle-month-picker" style="cursor:pointer;">' + monthLabel(mk) + ' 생활비 ' + (uiFlags.showMonthPicker ? '▴' : '▾') + '</div>' +
         '<button class="mp-month-btn" data-action="month-next">›</button>' +
@@ -713,6 +724,7 @@
         '</div>' +
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
       '</section>' +
+    '</div>' +
       '<section class="mp-card">' +
         '<div class="mp-label" style="margin-bottom:6px;">지출 내역</div>' +
         '<form class="mp-tx-add-personal" data-action="add-living-tx">' +
@@ -754,6 +766,54 @@
           }).join("") : '<div class="mp-empty">이번 달 지출 내역이 없어요</div>') +
         '</div>' +
       '</section>';
+  }
+
+  // ---------- 대출 탭 ----------
+  function renderLoan(){
+    var total = state.loans.reduce(function(s,l){ return s + Number(l.balance||0); }, 0);
+    var html = "";
+
+    html += '<div class="mp-tab-sticky">' +
+      '<section class="mp-card mp-hero">' +
+        '<div class="mp-label">총 대출 잔액</div>' +
+        '<div class="mp-total ' + (total>0?"neg":"pos") + '">' + won(total) + '</div>' +
+        '<div class="mp-sub">' + state.loans.length + '건</div>' +
+      '</section>' +
+      (uiFlags.showAddLoan ?
+        '<form class="mp-add-account-form" data-action="add-loan">' +
+          '<input type="text" name="name" placeholder="대출 이름 (예: 전세자금대출)" required style="flex:1;">' +
+          '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
+          '<button class="mp-btn small" type="submit">추가</button>' +
+          '<button type="button" class="mp-btn ghost small" data-action="cancel-add-loan">취소</button>' +
+        '</form>' :
+        '<button class="mp-btn ghost block" data-action="show-add-loan">+ 대출 추가</button>') +
+    '</div>';
+
+    if(!state.loans.length){
+      html += '<div class="mp-empty">등록된 대출이 없어요</div>';
+      return html;
+    }
+
+    var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
+    state.loans.forEach(function(loan, idx){
+      var color = loan.color || palette[idx % palette.length];
+      html += '<div class="mp-card mp-loan-card" style="border-left-color:' + color + ';">' +
+        '<div class="mp-account-top">' +
+          '<div class="mp-account-name">' + esc(loan.name) + '</div>' +
+          '<button class="mp-icon-btn" data-action="delete-loan" data-id="' + loan.id + '">삭제</button>' +
+        '</div>' +
+        '<div class="mp-balance-label">남은 원금</div>' +
+        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-loan-balance" data-id="' + loan.id + '" value="' + formatNumberString(loan.balance) + '" style="font-size:1.3rem;font-weight:700;width:100%;border:none;background:none;padding:2px 0;">' +
+        '<div class="mp-loan-meta">' +
+          '<div class="mp-detail-field"><div class="mp-label">금리(%)</div>' +
+            '<input type="text" class="mp-loan-input" data-action="set-loan-rate" data-id="' + loan.id + '" value="' + esc(loan.rate||"") + '" placeholder="예: 3.5"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">월 상환액</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-loan-monthly" data-id="' + loan.id + '" value="' + formatNumberString(loan.monthlyPayment||0) + '" placeholder="0"></div>' +
+        '</div>' +
+      '</div>';
+    });
+
+    return html;
   }
 
   // ---------- events ----------
@@ -804,6 +864,14 @@
       if(!confirm("이 계좌를 삭제할까요? 기록도 함께 삭제돼요.")) return;
       state.accounts = state.accounts.filter(function(a){ return a.id !== el.dataset.id; });
       delete state.logs[el.dataset.id];
+      saveState(); render(); return;
+    }
+
+    if(action === "show-add-loan"){ uiFlags.showAddLoan = true; render(); return; }
+    if(action === "cancel-add-loan"){ uiFlags.showAddLoan = false; render(); return; }
+    if(action === "delete-loan"){
+      if(!confirm("이 대출을 삭제할까요?")) return;
+      state.loans = state.loans.filter(function(l){ return l.id !== el.dataset.id; });
       saveState(); render(); return;
     }
 
@@ -945,6 +1013,21 @@
       if(accC){ accC.color = el.value; saveState(); render(); }
       return;
     }
+    if(action === "set-loan-balance"){
+      var loanB = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanB){ loanB.balance = parseMoneyValue(el.value); saveState(); render(); }
+      return;
+    }
+    if(action === "set-loan-rate"){
+      var loanR = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanR){ loanR.rate = el.value.trim(); saveState(); }
+      return;
+    }
+    if(action === "set-loan-monthly"){
+      var loanM = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanM){ loanM.monthlyPayment = parseMoneyValue(el.value); saveState(); render(); }
+      return;
+    }
     if(action === "set-budget"){
       var monthObj = getFamilyMonth(state.currentMonth);
       var entry = getCategoryEntry(monthObj, el.dataset.cat);
@@ -982,6 +1065,17 @@
       var color = palette[state.accounts.length % palette.length];
       state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color, purpose: purpose });
       uiFlags.showAddAccount = false;
+      saveState(); render(); return;
+    }
+
+    if(action === "add-loan"){
+      var loanName = (fd.get("name")||"").trim();
+      if(!loanName) return;
+      var loanRate = (fd.get("rate")||"").trim();
+      var loanPalette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
+      var loanColor = loanPalette[state.loans.length % loanPalette.length];
+      state.loans.push({ id: uid(), name: loanName, balance: 0, rate: loanRate, monthlyPayment: 0, color: loanColor });
+      uiFlags.showAddLoan = false;
       saveState(); render(); return;
     }
 
