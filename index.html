@@ -57,10 +57,16 @@
     background:var(--bg);
     padding:max(20px, env(safe-area-inset-top)) 20px 12px;
     border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
   .mp-header .mp-date{
     font-size:.95rem; color:var(--ink); font-weight:700; letter-spacing:-0.01em;
   }
+  .mp-reset-btn{
+    font-family:var(--font-ui); background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius:999px; padding:5px 11px; font-size:.72rem; font-weight:650; cursor:pointer; flex-shrink:0;
+  }
+  .mp-reset-btn:hover{ color:var(--negative); border-color:var(--negative); }
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
 
@@ -310,6 +316,7 @@
 <div id="mp-root">
   <header class="mp-header" id="mp-header">
     <div class="mp-date" id="mp-headerdate"></div>
+    <button class="mp-reset-btn" data-action="reset-all" type="button">초기화</button>
   </header>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
@@ -828,6 +835,13 @@
     var el = e.target.closest("[data-action]");
     if(!el) return;
     var action = el.dataset.action;
+
+    if(action === "reset-all"){
+      if(!confirm("정말 모든 데이터를 지우고 처음부터 시작할까요? 계좌, 가계부 기록, 대출 정보가 전부 삭제되고 되돌릴 수 없어요.")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+      return;
+    }
 
     if(action === "show-add-account"){ uiFlags.showAddAccount = true; render(); return; }
     if(action === "cancel-add-account"){ uiFlags.showAddAccount = false; render(); return; }
