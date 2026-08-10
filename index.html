@@ -205,8 +205,10 @@
   .mp-sort-btn.active{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent-soft); }
   .mp-tx-edit{
     display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:8px 0; border-top:1px solid var(--line);
+    width:100%; box-sizing:border-box;
   }
-  .mp-tx-edit select, .mp-tx-edit input{ height:32px; box-sizing:border-box; padding:0 8px; }
+  .mp-tx-edit > *{ min-width:0; }
+  .mp-tx-edit select, .mp-tx-edit input{ height:32px; box-sizing:border-box; padding:0 8px; width:100%; font-size:.82rem; }
   .mp-tx-edit .mp-tx-edit-actions{ grid-column:1 / -1; display:flex; gap:6px; justify-content:flex-end; }
 
   /* month switcher */
