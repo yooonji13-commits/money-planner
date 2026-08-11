@@ -302,7 +302,7 @@
     100%{ background:transparent; opacity:.45; transform:scale(1); }
   }
   .mp-tx-row.mp-just-reflected{ animation:mp-reflect-pulse .5s ease; border-radius:var(--radius-sm); }
-  .mp-log-card{ padding:6px 16px; }
+  .mp-log-card{ padding:6px 16px; margin-top:4px; }
   .mp-log-card .mp-log{ margin-top:0; }
   .mp-log-card .mp-empty{ padding:16px 0; }
   .mp-tx-add, .mp-tx-add-personal{
@@ -567,6 +567,12 @@
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
     if(appHeader) document.documentElement.style.setProperty("--mp-header-h", appHeader.offsetHeight + "px");
+    // iOS Safari sometimes fails to re-evaluate position:sticky elements after we
+    // rebuild main.innerHTML on every render(), leaving them visually "stuck" in a
+    // stale position that overlaps the content right after them. A tiny 1px scroll
+    // nudge forces WebKit to recompute sticky positions; it's imperceptible to the user.
+    window.scrollBy(0, 1);
+    window.scrollBy(0, -1);
   }
   window.addEventListener("resize", updateStickyOffset);
   window.addEventListener("orientationchange", updateStickyOffset);
