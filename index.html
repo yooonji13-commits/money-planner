@@ -150,7 +150,6 @@
   .mp-fixed-add{ display:grid; grid-template-columns:1fr 100px auto; gap:6px; margin-top:8px; }
   .mp-fixed-add input, .mp-fixed-edit input{ width:100%; }
   .mp-fixed-edit{ display:grid; grid-template-columns:1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
-  .mp-loan-card{ border-left-width:4px; border-left-style:solid; }
   .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
   .mp-loan-input{ width:100%; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
@@ -416,6 +415,10 @@
     (s.accounts || []).forEach(function(a){
       if(!Array.isArray(a.fixedExpenses)) a.fixedExpenses = [];
     });
+    (s.loans || []).forEach(function(l){
+      if(typeof l.originalAmount !== "number") l.originalAmount = 0;
+      if(typeof l.term !== "string") l.term = "";
+    });
     return s;
   }
 
@@ -499,7 +502,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{} };
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -929,6 +932,8 @@
   function renderLoan(){
     var total = state.loans.reduce(function(s,l){ return s + Number(l.balance||0); }, 0);
     var html = "";
+    var expandedLoanId = state.loans.reduce(function(found, l){ return found || (uiFlags.expandedLoans[l.id] ? l.id : null); }, null);
+    var expandedLoan = expandedLoanId ? state.loans.find(function(l){ return l.id === expandedLoanId; }) : null;
 
     html += '<div class="mp-tab-sticky">' +
       '<section class="mp-card mp-hero">' +
@@ -936,39 +941,84 @@
         '<div class="mp-total ' + (total>0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
         '<div class="mp-sub">' + state.loans.length + '건</div>' +
       '</section>' +
-      (uiFlags.showAddLoan ?
-        '<form class="mp-add-account-form" data-action="add-loan">' +
-          '<input type="text" name="name" placeholder="대출 이름 (예: 전세자금대출)" required style="flex:1;">' +
-          '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
-          '<button class="mp-btn small" type="submit">추가</button>' +
-          '<button type="button" class="mp-btn ghost small" data-action="cancel-add-loan">취소</button>' +
-        '</form>' :
-        '<button class="mp-btn ghost block" data-action="show-add-loan">+ 대출 추가</button>') +
-    '</div>';
+      (expandedLoanId ?
+        '<button class="mp-btn ghost block" data-action="toggle-loan" data-id="' + expandedLoanId + '">← 뒤로가기</button>' :
+        (uiFlags.showAddLoan ?
+          '<form class="mp-add-account-form" data-action="add-loan">' +
+            '<input type="text" name="name" placeholder="대출 이름 (예: 전세자금대출)" required style="flex:1;">' +
+            '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
+            '<button class="mp-btn small" type="submit">추가</button>' +
+            '<button type="button" class="mp-btn ghost small" data-action="cancel-add-loan">취소</button>' +
+          '</form>' :
+          '<button class="mp-btn ghost block" data-action="show-add-loan">+ 대출 추가</button>'));
 
-    if(!state.loans.length){
-      html += '<div class="mp-empty">등록된 대출이 없어요</div>';
-      return html;
-    }
+    if(expandedLoan){
+      var color0 = expandedLoan.color || "#3182F6";
+      var editingSettings0 = !!uiFlags.editingLoanSettings[expandedLoan.id];
+      var repaid0 = Number(expandedLoan.originalAmount||0) - Number(expandedLoan.balance||0);
 
-    var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
-    state.loans.forEach(function(loan, idx){
-      var color = loan.color || palette[idx % palette.length];
-      html += '<div class="mp-card mp-loan-card" style="border-left-color:' + color + ';">' +
-        '<div class="mp-account-top">' +
-          '<div class="mp-account-name">' + esc(loan.name) + '</div>' +
-          '<button class="mp-icon-btn" data-action="delete-loan" data-id="' + loan.id + '">삭제</button>' +
+      html += '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
+        '<div class="mp-account-body">' +
+          '<div class="mp-account-name-row">' +
+            '<div class="mp-account-name">' + esc(expandedLoan.name) + '</div>' +
+            '<button class="mp-icon-btn mp-edit-icon" data-action="toggle-loan-settings" data-id="' + expandedLoan.id + '" title="대출 정보 수정">' + (editingSettings0 ? '✓' : '✎') + '</button>' +
+          '</div>' +
+          (expandedLoan.term ? '<div class="mp-account-purpose">' + esc(expandedLoan.term) + '</div>' : '') +
+          '<div class="mp-balance-row">' +
+            '<div class="mp-balance-field">' +
+              '<div class="mp-balance-label">잔여 금액</div>' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-balance" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.balance) + '">' +
+            '</div>' +
+            '<div class="mp-balance-field">' +
+              '<div class="mp-balance-label">변제 금액</div>' +
+              '<div class="mp-account-total">' + won(repaid0) + '</div>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="mp-balance-label">남은 원금</div>' +
-        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-loan-balance" data-id="' + loan.id + '" value="' + formatNumberString(loan.balance) + '" style="font-size:1.3rem;font-weight:700;width:100%;border:none;background:none;padding:2px 0;">' +
-        '<div class="mp-loan-meta">' +
-          '<div class="mp-detail-field"><div class="mp-label">금리(%)</div>' +
-            '<input type="text" class="mp-loan-input" data-action="set-loan-rate" data-id="' + loan.id + '" value="' + esc(loan.rate||"") + '" placeholder="예: 3.5"></div>' +
-          '<div class="mp-detail-field"><div class="mp-label">월 상환액</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-loan-monthly" data-id="' + loan.id + '" value="' + formatNumberString(loan.monthlyPayment||0) + '" placeholder="0"></div>' +
+        '<div class="mp-account-detail">' +
+          (editingSettings0 ? (
+            '<div class="mp-account-settings-panel">' +
+              '<div class="mp-detail-field"><div class="mp-label">총 대출금액</div>' +
+                '<input type="text" inputmode="numeric" class="mp-money" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0">' +
+              '</div>' +
+              '<div class="mp-detail-field"><div class="mp-label">대출기간</div>' +
+                '<input type="text" data-action="set-loan-term" data-id="' + expandedLoan.id + '" value="' + esc(expandedLoan.term||"") + '" placeholder="예: 2024.01 ~ 2027.01 또는 36개월">' +
+              '</div>' +
+              '<div class="mp-loan-meta">' +
+                '<div class="mp-detail-field"><div class="mp-label">금리(%)</div>' +
+                  '<input type="text" class="mp-loan-input" data-action="set-loan-rate" data-id="' + expandedLoan.id + '" value="' + esc(expandedLoan.rate||"") + '" placeholder="예: 3.5"></div>' +
+                '<div class="mp-detail-field"><div class="mp-label">월 상환액</div>' +
+                  '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-loan-monthly" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.monthlyPayment||0) + '" placeholder="0"></div>' +
+              '</div>' +
+              '<div class="mp-account-settings-row">' +
+                '<input type="color" class="mp-color-swatch" data-action="set-loan-color" data-id="' + expandedLoan.id + '" value="' + color0 + '" title="카드 색상">' +
+                '<button class="mp-icon-btn" data-action="delete-loan" data-id="' + expandedLoan.id + '">삭제</button>' +
+              '</div>' +
+            '</div>'
+          ) : "") +
         '</div>' +
       '</div>';
-    });
+    }
+    html += '</div>';
+
+    if(!expandedLoan){
+      html += '<div class="mp-accounts-grid">';
+      var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
+      state.loans.forEach(function(loan, idx){
+        var color = loan.color || palette[idx % palette.length];
+        html += '<div class="mp-account" data-action="toggle-loan" data-id="' + loan.id + '" style="--acc-color:' + color + ';">' +
+          '<div class="mp-account-body">' +
+            '<div class="mp-account-name">' + esc(loan.name) + '</div>' +
+            '<div class="mp-balance-label">잔여 금액</div>' +
+            '<div class="mp-account-total">' + won(loan.balance) + '</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      if(!state.loans.length){
+        html += '<div class="mp-empty">등록된 대출이 없어요. "+ 대출 추가"로 시작해보세요.</div>';
+      }
+    }
 
     return html;
   }
@@ -1100,7 +1150,27 @@
     if(action === "delete-loan"){
       if(!confirm("이 대출을 삭제할까요?")) return;
       state.loans = state.loans.filter(function(l){ return l.id !== el.dataset.id; });
+      delete uiFlags.expandedLoans[el.dataset.id];
+      delete uiFlags.editingLoanSettings[el.dataset.id];
       saveState(); render(); return;
+    }
+
+    if(action === "toggle-loan"){
+      var toggleLoanId = el.dataset.id;
+      var pendingLoanInput = main.querySelector('.mp-balance-edit[data-id="' + toggleLoanId + '"]');
+      if(pendingLoanInput){
+        var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
+        if(pendingLoan) pendingLoan.balance = parseMoneyValue(pendingLoanInput.value);
+      }
+      var willExpandLoan = !uiFlags.expandedLoans[toggleLoanId];
+      if(willExpandLoan) uiFlags.expandedLoans = {};
+      uiFlags.expandedLoans[toggleLoanId] = willExpandLoan;
+      if(!willExpandLoan){ uiFlags.editingLoanSettings[toggleLoanId] = false; }
+      saveState(); render(); return;
+    }
+    if(action === "toggle-loan-settings"){
+      uiFlags.editingLoanSettings[el.dataset.id] = !uiFlags.editingLoanSettings[el.dataset.id];
+      render(); return;
     }
 
     if(action === "delete-category"){
@@ -1278,6 +1348,21 @@
       if(loanM){ loanM.monthlyPayment = parseMoneyValue(el.value); saveState(); render(); }
       return;
     }
+    if(action === "set-loan-original"){
+      var loanO = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanO){ loanO.originalAmount = parseMoneyValue(el.value); saveState(); render(); }
+      return;
+    }
+    if(action === "set-loan-term"){
+      var loanT = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanT){ loanT.term = el.value.trim(); saveState(); render(); }
+      return;
+    }
+    if(action === "set-loan-color"){
+      var loanC = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanC){ loanC.color = el.value; saveState(); render(); }
+      return;
+    }
     if(action === "set-budget"){
       var monthObj = getFamilyMonth(state.currentMonth);
       var entry = getCategoryEntry(monthObj, el.dataset.cat);
@@ -1350,7 +1435,7 @@
       var loanRate = (fd.get("rate")||"").trim();
       var loanPalette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
       var loanColor = loanPalette[state.loans.length % loanPalette.length];
-      state.loans.push({ id: uid(), name: loanName, balance: 0, rate: loanRate, monthlyPayment: 0, color: loanColor });
+      state.loans.push({ id: uid(), name: loanName, balance: 0, originalAmount: 0, term: "", rate: loanRate, monthlyPayment: 0, color: loanColor });
       uiFlags.showAddLoan = false;
       saveState(); render(); return;
     }
