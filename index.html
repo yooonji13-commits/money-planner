@@ -501,6 +501,19 @@
 
   var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null };
 
+  function scrollRowIntoView(id){
+    var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
+    if(!el) return;
+    var header = document.getElementById("mp-header");
+    var stickyWrap = document.querySelector(".mp-tab-sticky");
+    var offset = (header ? header.offsetHeight : 0) + (stickyWrap ? stickyWrap.offsetHeight : 0);
+    var rect = el.getBoundingClientRect();
+    if(rect.top < offset || rect.bottom > window.innerHeight){
+      var target = window.scrollY + rect.top - offset - 8;
+      window.scrollTo(0, Math.max(0, target));
+    }
+  }
+
   function accountTotal(acc){
     var log = getLog(acc.id);
     var delta = log.reduce(function(s,t){
@@ -1356,9 +1369,12 @@
       var memo = (fd.get("memo")||"").trim();
       var acc = state.accounts.find(function(a){ return a.id === accId; });
       if(!acc) return;
-      getLog(accId).push({ id: uid(), date: date, memo: memo, amount: amount, type: type, ts: Date.now(), reflected: false });
+      var newId = uid();
+      getLog(accId).push({ id: newId, date: date, memo: memo, amount: amount, type: type, ts: Date.now(), reflected: false });
       form.reset();
-      saveState(); render(); return;
+      saveState(); render();
+      scrollRowIntoView(newId);
+      return;
     }
 
     if(action === "save-edit-tx"){
