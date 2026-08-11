@@ -693,7 +693,10 @@
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + esc(expandedAcc.name) + '</div>' +
-            '<button class="mp-icon-btn mp-edit-icon" data-action="toggle-settings" data-id="' + expandedAcc.id + '" title="계좌 정보 수정">' + (editingSettings0 ? '✓' : '✎') + '</button>' +
+            '<span style="display:flex;gap:2px;flex-shrink:0;">' +
+              '<button class="mp-icon-btn mp-edit-icon" data-action="toggle-settings" data-id="' + expandedAcc.id + '" title="계좌 정보 수정">' + (editingSettings0 ? '✓' : '✎') + '</button>' +
+              '<button class="mp-icon-btn mp-edit-icon" data-action="delete-account" data-id="' + expandedAcc.id + '" title="계좌 삭제">✕</button>' +
+            '</span>' +
           '</div>' +
           (expandedAcc.purpose ? '<div class="mp-account-purpose">' + esc(expandedAcc.purpose) + '</div>' : '') +
           '<div class="mp-balance-row">' +
@@ -721,7 +724,6 @@
               '</div>' +
               '<div class="mp-account-settings-row">' +
                 '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + expandedAcc.id + '" value="' + color0 + '" title="카드 색상">' +
-                '<button class="mp-icon-btn" data-action="delete-account" data-id="' + expandedAcc.id + '">삭제</button>' +
               '</div>' +
             '</div>'
           ) : "") +
