@@ -350,7 +350,7 @@
     <div class="mp-header-actions">
       <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
       <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
-      <button class="mp-reset-btn" data-action="reset-all" type="button">초기화</button>
+      <button class="mp-reset-btn" id="mp-reset-btn" data-action="reset-tab" type="button">초기화</button>
     </div>
     <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
@@ -567,6 +567,8 @@
     return (negative ? -1 : 1) * Number(digits);
   }
 
+  var TAB_NAMES = { personal: "개인", living: "생활비", family: "집안행사", loan: "대출" };
+  var resetBtn = document.getElementById("mp-reset-btn");
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
     if(appHeader) document.documentElement.style.setProperty("--mp-header-h", appHeader.offsetHeight + "px");
@@ -585,6 +587,7 @@
     document.querySelectorAll(".mp-tab").forEach(function(btn){
       btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
     });
+    if(resetBtn) resetBtn.textContent = (TAB_NAMES[state.activeTab] || "") + " 초기화";
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderFamily();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
@@ -1036,10 +1039,33 @@
     if(!el) return;
     var action = el.dataset.action;
 
-    if(action === "reset-all"){
-      if(!confirm("정말 모든 데이터를 지우고 처음부터 시작할까요? 계좌, 가계부 기록, 대출 정보가 전부 삭제되고 되돌릴 수 없어요.")) return;
-      localStorage.removeItem(STORAGE_KEY);
-      location.reload();
+    if(action === "reset-tab"){
+      var tabName = TAB_NAMES[state.activeTab] || "현재 탭";
+      if(!confirm("정말 " + tabName + " 탭의 데이터를 모두 지우고 초기화할까요? 되돌릴 수 없어요.")) return;
+      if(state.activeTab === "personal"){
+        state.accounts = [];
+        state.logs = {};
+        uiFlags.expandedAccounts = {};
+        uiFlags.editingSettings = {};
+        uiFlags.editingFixed = null;
+        uiFlags.showFixed = {};
+        uiFlags.showAddAccount = false;
+      } else if(state.activeTab === "living"){
+        state.living = {};
+        uiFlags.editingLivingTx = null;
+        uiFlags.showMonthPicker = false;
+      } else if(state.activeTab === "family"){
+        state.familyCategories = defaultState().familyCategories;
+        state.familyData = {};
+        uiFlags.expandedCategories = {};
+        uiFlags.showAddCategory = false;
+      } else if(state.activeTab === "loan"){
+        state.loans = [];
+        uiFlags.expandedLoans = {};
+        uiFlags.editingLoanSettings = {};
+        uiFlags.showAddLoan = false;
+      }
+      saveState(); render();
       return;
     }
 
