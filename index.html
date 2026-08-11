@@ -933,7 +933,7 @@
     html += '<div class="mp-tab-sticky">' +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">총 대출 잔액</div>' +
-        '<div class="mp-total ' + (total>0?"neg":"pos") + '">' + won(total) + '</div>' +
+        '<div class="mp-total ' + (total>0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
         '<div class="mp-sub">' + state.loans.length + '건</div>' +
       '</section>' +
       (uiFlags.showAddLoan ?
