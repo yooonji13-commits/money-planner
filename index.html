@@ -153,12 +153,6 @@
   .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
-  .mp-loan-tx-add{
-    display:grid; grid-template-columns:104px 64px 1fr auto; gap:6px; margin-top:10px; align-items:center;
-  }
-  .mp-loan-tx-add > *{ min-width:0; }
-  .mp-loan-tx-add input{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; }
-  .mp-loan-tx-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
   .mp-loan-input{ width:100%; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
@@ -426,7 +420,16 @@
     (s.loans || []).forEach(function(l){
       if(typeof l.originalAmount !== "number") l.originalAmount = 0;
       if(typeof l.startDate !== "string") l.startDate = "";
-      if(!Array.isArray(l.log)) l.log = [];
+      if(typeof l.currentInstallment !== "number"){
+        var maxInstallment = 0;
+        if(Array.isArray(l.log)){
+          l.log.forEach(function(t){ maxInstallment = Math.max(maxInstallment, Number(t.installment||0)); });
+        }
+        l.currentInstallment = maxInstallment;
+      }
+      delete l.log;
+      delete l.color;
+      delete l.balance;
     });
     return s;
   }
@@ -511,7 +514,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, editingLoanTx:null };
+  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{} };
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -535,21 +538,8 @@
     return Number(acc.balance||0) + delta;
   }
 
-  function getLoanLog(loan){
-    if(!Array.isArray(loan.log)) loan.log = [];
-    return loan.log;
-  }
-  function loanLatestInstallment(loan){
-    var log = getLoanLog(loan);
-    if(!log.length) return 0;
-    var sorted = log.slice().sort(function(a,b){
-      var d = b.date.localeCompare(a.date);
-      return d !== 0 ? d : (b.ts||0) - (a.ts||0);
-    });
-    return Number(sorted[0].installment || 0);
-  }
   function loanRepaid(loan){
-    return loanLatestInstallment(loan) * Number(loan.monthlyPayment||0);
+    return Number(loan.currentInstallment||0) * Number(loan.monthlyPayment||0);
   }
   function loanRemaining(loan){
     return Number(loan.originalAmount||0) - loanRepaid(loan);
@@ -562,7 +552,7 @@
   function loanRemainingInstallments(loan){
     var t = loanTotalInstallments(loan);
     if(t <= 0) return 0;
-    return Math.max(0, t - loanLatestInstallment(loan));
+    return Math.max(0, t - Number(loan.currentInstallment||0));
   }
   function fmtDateDots(iso){
     if(!iso) return "";
@@ -1001,16 +991,13 @@
           '<button class="mp-btn ghost block" data-action="show-add-loan">+ 대출 추가</button>'));
 
     if(expandedLoan){
-      var color0 = expandedLoan.color || "#3182F6";
       var editingSettings0 = !!uiFlags.editingLoanSettings[expandedLoan.id];
-      var log0 = getLoanLog(expandedLoan);
       var remaining0 = loanRemaining(expandedLoan);
       var repaid0 = loanRepaid(expandedLoan);
       var totalInst0 = loanTotalInstallments(expandedLoan);
       var remainInst0 = loanRemainingInstallments(expandedLoan);
-      var latestInst0 = loanLatestInstallment(expandedLoan);
 
-      html += '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
+      html += '<div class="mp-account is-expanded">' +
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + esc(expandedLoan.name) + '</div>' +
@@ -1027,6 +1014,14 @@
               '<div class="mp-account-total' + (remaining0<0?' neg':'') + '">' + won(remaining0) + '</div>' +
             '</div>' +
           '</div>' +
+          '<div class="mp-balance-field" style="margin-top:10px;">' +
+            '<div class="mp-balance-label">현재 회차</div>' +
+            '<input type="number" inputmode="numeric" class="mp-balance-edit" data-action="set-loan-installment" data-id="' + expandedLoan.id + '" value="' + Number(expandedLoan.currentInstallment||0) + '" placeholder="0" min="0" step="1" style="width:100%;">' +
+          '</div>' +
+          '<div class="mp-loan-stats">' +
+            '변제 금액 <b>' + won(repaid0) + '</b>' +
+            (totalInst0 > 0 ? (' · 총 ' + totalInst0 + '회 중 잔여 ' + remainInst0 + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요') +
+          '</div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           (editingSettings0 ? (
@@ -1040,68 +1035,21 @@
                 '<div class="mp-detail-field"><div class="mp-label">월 상환액</div>' +
                   '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-loan-monthly" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.monthlyPayment||0) + '" placeholder="0"></div>' +
               '</div>' +
-              '<div class="mp-account-settings-row">' +
-                '<input type="color" class="mp-color-swatch" data-action="set-loan-color" data-id="' + expandedLoan.id + '" value="' + color0 + '" title="카드 색상">' +
+              '<div class="mp-account-settings-row" style="justify-content:flex-end;">' +
                 '<button class="mp-icon-btn" data-action="delete-loan" data-id="' + expandedLoan.id + '">삭제</button>' +
               '</div>' +
             '</div>'
           ) : "") +
-          '<div class="mp-loan-stats">' +
-            '변제 금액 <b>' + won(repaid0) + '</b> · ' +
-            (totalInst0 > 0 ? ('총 ' + totalInst0 + '회 중 ' + latestInst0 + '회차 납부 · 잔여 ' + remainInst0 + '회') : '월 상환액을 입력하면 잔여 회차가 표시돼요') +
-          '</div>' +
-          '<form class="mp-loan-tx-add" data-action="add-loan-tx" data-loan="' + expandedLoan.id + '">' +
-            '<input type="date" name="date" value="' + todayISO + '" required>' +
-            '<input type="number" inputmode="numeric" name="installment" placeholder="회차" required min="1" step="1">' +
-            '<input type="text" name="memo" placeholder="메모">' +
-            '<button class="mp-btn small" type="submit">추가</button>' +
-          '</form>' +
         '</div>' +
       '</div>';
     }
     html += '</div>';
 
-    if(expandedLoan){
-      var log = getLoanLog(expandedLoan);
-      var sorted = log.slice().sort(function(a,b){
-        var d = b.date.localeCompare(a.date);
-        return d !== 0 ? d : (b.ts||0) - (a.ts||0);
-      });
-      var editing = uiFlags.editingLoanTx && uiFlags.editingLoanTx.loanId === expandedLoan.id ? uiFlags.editingLoanTx.txId : null;
-
-      html += '<div class="mp-card mp-log-card">' +
-        (log.length ?
-        '<div class="mp-log">' +
-          sorted.map(function(t){
-            if(editing === t.id){
-              return '<form class="mp-tx-edit" data-action="save-edit-loan-tx" data-loan="' + expandedLoan.id + '" data-id="' + t.id + '">' +
-                '<input type="date" name="date" value="' + t.date + '" required>' +
-                '<input type="number" inputmode="numeric" name="installment" value="' + Number(t.installment||0) + '" required min="1" step="1">' +
-                '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
-                '<div class="mp-tx-edit-actions">' +
-                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-loan-tx">취소</button>' +
-                  '<button type="submit" class="mp-btn small">저장</button>' +
-                '</div>' +
-              '</form>';
-            }
-            return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
-              '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-              '<span class="mp-tx-amt">' + Number(t.installment||0) + '회차</span>' +
-              '<span style="display:flex;gap:2px;">' +
-              '<button class="mp-icon-btn" data-action="start-edit-loan-tx" data-loan="' + expandedLoan.id + '" data-id="' + t.id + '">✎</button>' +
-              '<button class="mp-icon-btn" data-action="delete-loan-tx" data-loan="' + expandedLoan.id + '" data-id="' + t.id + '">✕</button>' +
-              '</span></div>';
-          }).join("") +
-        '</div>'
-        : '<div class="mp-empty">아직 납부 내역이 없어요</div>') +
-      '</div>';
-    } else {
+    if(!expandedLoan){
       html += '<div class="mp-accounts-grid">';
-      var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
-      state.loans.forEach(function(loan, idx){
-        var color = loan.color || palette[idx % palette.length];
+      state.loans.forEach(function(loan){
         var remaining = loanRemaining(loan);
-        html += '<div class="mp-account" data-action="toggle-loan" data-id="' + loan.id + '" style="--acc-color:' + color + ';">' +
+        html += '<div class="mp-account" data-action="toggle-loan" data-id="' + loan.id + '">' +
           '<div class="mp-account-body">' +
             '<div class="mp-account-name">' + esc(loan.name) + '</div>' +
             '<div class="mp-balance-label">잔여 금액</div>' +
@@ -1275,10 +1223,12 @@
 
     if(action === "toggle-loan"){
       var toggleLoanId = el.dataset.id;
-      var pendingLoanInput = main.querySelector('.mp-balance-edit[data-id="' + toggleLoanId + '"]');
-      if(pendingLoanInput){
-        var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
-        if(pendingLoan) pendingLoan.originalAmount = parseMoneyValue(pendingLoanInput.value);
+      var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
+      if(pendingLoan){
+        var pendingOriginalInput = main.querySelector('[data-action="set-loan-original"][data-id="' + toggleLoanId + '"]');
+        if(pendingOriginalInput) pendingLoan.originalAmount = parseMoneyValue(pendingOriginalInput.value);
+        var pendingInstallmentInput = main.querySelector('[data-action="set-loan-installment"][data-id="' + toggleLoanId + '"]');
+        if(pendingInstallmentInput) pendingLoan.currentInstallment = Math.max(0, parseInt(pendingInstallmentInput.value, 10) || 0);
       }
       var willExpandLoan = !uiFlags.expandedLoans[toggleLoanId];
       if(willExpandLoan) uiFlags.expandedLoans = {};
@@ -1342,21 +1292,6 @@
     }
     if(action === "cancel-edit-tx"){
       uiFlags.editingTx = null;
-      render(); return;
-    }
-
-    if(action === "delete-loan-tx"){
-      var loanForDelete = state.loans.find(function(l){ return l.id === el.dataset.loan; });
-      if(loanForDelete) loanForDelete.log = getLoanLog(loanForDelete).filter(function(t){ return t.id !== el.dataset.id; });
-      if(uiFlags.editingLoanTx && uiFlags.editingLoanTx.txId === el.dataset.id) uiFlags.editingLoanTx = null;
-      saveState(); render(); return;
-    }
-    if(action === "start-edit-loan-tx"){
-      uiFlags.editingLoanTx = { loanId: el.dataset.loan, txId: el.dataset.id };
-      render(); return;
-    }
-    if(action === "cancel-edit-loan-tx"){
-      uiFlags.editingLoanTx = null;
       render(); return;
     }
 
@@ -1486,9 +1421,9 @@
       if(loanT){ loanT.startDate = el.value; saveState(); render(); }
       return;
     }
-    if(action === "set-loan-color"){
-      var loanC = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanC){ loanC.color = el.value; saveState(); render(); }
+    if(action === "set-loan-installment"){
+      var loanI = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); render(); }
       return;
     }
     if(action === "set-budget"){
@@ -1561,9 +1496,7 @@
       var loanName = (fd.get("name")||"").trim();
       if(!loanName) return;
       var loanRate = (fd.get("rate")||"").trim();
-      var loanPalette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
-      var loanColor = loanPalette[state.loans.length % loanPalette.length];
-      state.loans.push({ id: uid(), name: loanName, originalAmount: 0, startDate: "", rate: loanRate, monthlyPayment: 0, color: loanColor, log: [] });
+      state.loans.push({ id: uid(), name: loanName, originalAmount: 0, startDate: "", rate: loanRate, monthlyPayment: 0, currentInstallment: 0 });
       uiFlags.showAddLoan = false;
       saveState(); render(); return;
     }
@@ -1610,34 +1543,6 @@
       entry3.date = newDate;
       entry3.memo = newMemo;
       uiFlags.editingTx = null;
-      saveState(); render(); return;
-    }
-
-    if(action === "add-loan-tx"){
-      var loanId = form.dataset.loan;
-      var loan = state.loans.find(function(l){ return l.id === loanId; });
-      if(!loan) return;
-      var installment = Math.abs(parseInt(fd.get("installment"), 10) || 0);
-      if(installment <= 0) return;
-      var loanDate = fd.get("date") || todayISO;
-      var loanMemo = (fd.get("memo")||"").trim();
-      getLoanLog(loan).push({ id: uid(), date: loanDate, installment: installment, memo: loanMemo, ts: Date.now() });
-      form.reset();
-      saveState(); render(); return;
-    }
-
-    if(action === "save-edit-loan-tx"){
-      var loanId2 = form.dataset.loan;
-      var loanTxId = form.dataset.id;
-      var loan2 = state.loans.find(function(l){ return l.id === loanId2; });
-      var loanEntry = loan2 && getLoanLog(loan2).find(function(t){ return t.id === loanTxId; });
-      if(!loan2 || !loanEntry) return;
-      var newInstallment = Math.abs(parseInt(fd.get("installment"), 10) || 0);
-      if(newInstallment <= 0) return;
-      loanEntry.installment = newInstallment;
-      loanEntry.date = fd.get("date") || loanEntry.date;
-      loanEntry.memo = (fd.get("memo")||"").trim();
-      uiFlags.editingLoanTx = null;
       saveState(); render(); return;
     }
 
