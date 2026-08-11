@@ -983,7 +983,10 @@
         '<button class="mp-btn ghost block" data-action="toggle-loan" data-id="' + expandedLoanId + '">← 뒤로가기</button>' :
         (uiFlags.showAddLoan ?
           '<form class="mp-add-account-form" data-action="add-loan">' +
-            '<input type="text" name="name" placeholder="대출 이름 (예: 전세자금대출)" required style="flex:1;">' +
+            '<input type="text" name="name" placeholder="대출 이름 (예: 전세자금대출)" required style="flex:1 1 100%;">' +
+            '<input type="text" inputmode="numeric" class="mp-money" name="originalAmount" placeholder="대출 금액" style="flex:1;">' +
+            '<input type="number" inputmode="numeric" name="currentInstallment" placeholder="회차" min="0" step="1" style="flex:1;">' +
+            '<input type="text" inputmode="numeric" class="mp-money" name="monthlyPayment" placeholder="월 상환액" style="flex:1;">' +
             '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
             '<button class="mp-btn small" type="submit">추가</button>' +
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-loan">취소</button>' +
@@ -1496,7 +1499,10 @@
       var loanName = (fd.get("name")||"").trim();
       if(!loanName) return;
       var loanRate = (fd.get("rate")||"").trim();
-      state.loans.push({ id: uid(), name: loanName, originalAmount: 0, startDate: "", rate: loanRate, monthlyPayment: 0, currentInstallment: 0 });
+      var loanOriginal = Math.abs(parseMoneyValue(fd.get("originalAmount")));
+      var loanMonthly = Math.abs(parseMoneyValue(fd.get("monthlyPayment")));
+      var loanInstallment = Math.max(0, parseInt(fd.get("currentInstallment"), 10) || 0);
+      state.loans.push({ id: uid(), name: loanName, originalAmount: loanOriginal, startDate: "", rate: loanRate, monthlyPayment: loanMonthly, currentInstallment: loanInstallment });
       uiFlags.showAddLoan = false;
       saveState(); render(); return;
     }
