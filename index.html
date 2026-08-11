@@ -154,6 +154,14 @@
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
   .mp-loan-input{ width:100%; }
+  .mp-util-chart{ display:flex; align-items:flex-end; gap:8px; margin-top:10px; }
+  .mp-util-bar-col{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+  .mp-util-bar-val{ font-size:.6rem; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .mp-util-bar-track{ width:100%; height:100px; display:flex; align-items:flex-end; justify-content:center; }
+  .mp-util-bar{ width:100%; max-width:28px; background:var(--accent-soft); border-radius:4px 4px 0 0; min-height:2px; }
+  .mp-util-bar.current{ background:var(--accent); }
+  .mp-util-bar-label{ font-size:.66rem; color:var(--muted); }
+  .mp-util-bar-label.current{ color:var(--accent); font-weight:700; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -374,6 +382,10 @@
       <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/></svg></span>
       대출
     </button>
+    <button class="mp-tab" data-tab="utility">
+      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 21V9l6-4 6 4v12"/><path d="M10 21v-6h4v6"/><path d="M9 12h.01M15 12h.01M9 8.5h.01M15 8.5h.01"/></svg></span>
+      관리비
+    </button>
   </nav>
 </div>
 
@@ -404,7 +416,8 @@
       ],
       familyData: {},
       living: {},
-      loans: []
+      loans: [],
+      utilities: {}
     };
   }
 
@@ -446,7 +459,8 @@
         familyCategories: parsed.familyCategories || d.familyCategories,
         familyData: parsed.familyData || {},
         living: parsed.living || {},
-        loans: parsed.loans || []
+        loans: parsed.loans || [],
+        utilities: parsed.utilities || {}
       });
       migrateReflectedFlags(merged);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -504,6 +518,13 @@
   function getLivingMonth(key){
     if(!state.living[key]) state.living[key] = { budget: 0, tx: [] };
     return state.living[key];
+  }
+  function getUtilityMonth(key){
+    if(!state.utilities[key]) state.utilities[key] = { payDate: "", community: 0, electricity: 0, water: 0, heating: 0, other: 0 };
+    return state.utilities[key];
+  }
+  function utilityTotal(u){
+    return Number(u.community||0) + Number(u.electricity||0) + Number(u.water||0) + Number(u.heating||0) + Number(u.other||0);
   }
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
@@ -602,7 +623,7 @@
     return (negative ? -1 : 1) * Number(digits);
   }
 
-  var TAB_NAMES = { personal: "개인", living: "생활비", family: "집안행사", loan: "대출" };
+  var TAB_NAMES = { personal: "개인", living: "생활비", family: "집안행사", loan: "대출", utility: "관리비" };
   var resetBtn = document.getElementById("mp-reset-btn");
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
@@ -626,6 +647,7 @@
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderFamily();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
+    else if(state.activeTab === "utility") main.innerHTML = renderUtility();
     else main.innerHTML = renderLiving();
     updateStickyOffset();
   }
@@ -968,6 +990,67 @@
       '</section>';
   }
 
+  // ---------- 관리비 탭 ----------
+  function utilityChartHTML(currentKey){
+    var months = [];
+    for(var i = 5; i >= 0; i--){ months.push(shiftMonth(currentKey, -i)); }
+    var totals = months.map(function(mk){
+      var m = state.utilities[mk];
+      return m ? utilityTotal(m) : 0;
+    });
+    var max = Math.max.apply(null, totals.concat([1]));
+    var bars = months.map(function(mk, i){
+      var v = totals[i];
+      var h = max > 0 ? Math.max(2, Math.round((v / max) * 100)) : 2;
+      var isCurrent = mk === currentKey;
+      var mlabel = parseInt(mk.slice(5,7), 10) + '월';
+      return '<div class="mp-util-bar-col">' +
+        '<div class="mp-util-bar-val">' + (v > 0 ? won(v).replace("원","") : '') + '</div>' +
+        '<div class="mp-util-bar-track"><div class="mp-util-bar' + (isCurrent ? ' current' : '') + '" style="height:' + h + '%;"></div></div>' +
+        '<div class="mp-util-bar-label' + (isCurrent ? ' current' : '') + '">' + mlabel + '</div>' +
+      '</div>';
+    }).join("");
+    return '<div class="mp-util-chart">' + bars + '</div>';
+  }
+
+  function renderUtility(){
+    var mk = state.currentMonth;
+    var u = getUtilityMonth(mk);
+    var total = utilityTotal(u);
+
+    return '<div class="mp-tab-sticky">' +
+      '<div class="mp-month-switch">' +
+        '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
+        '<div class="mp-month-label" data-action="toggle-month-picker" style="cursor:pointer;">' + monthLabel(mk) + ' 관리비 ' + (uiFlags.showMonthPicker ? '▴' : '▾') + '</div>' +
+        '<button class="mp-month-btn" data-action="month-next">›</button>' +
+      '</div>' +
+      (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
+      '<section class="mp-card mp-hero">' +
+        '<div class="mp-detail-field"><div class="mp-label">납부일자</div>' +
+          '<input type="date" data-action="set-utility-field" data-field="payDate" value="' + esc(u.payDate||"") + '">' +
+        '</div>' +
+        '<div class="mp-loan-meta">' +
+          '<div class="mp-detail-field"><div class="mp-label">커뮤니티</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="community" value="' + formatNumberString(u.community||0) + '" placeholder="0"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">전기료</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="electricity" value="' + formatNumberString(u.electricity||0) + '" placeholder="0"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">수도비</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="water" value="' + formatNumberString(u.water||0) + '" placeholder="0"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">난방비</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="heating" value="' + formatNumberString(u.heating||0) + '" placeholder="0"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">기타</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="other" value="' + formatNumberString(u.other||0) + '" placeholder="0"></div>' +
+        '</div>' +
+        '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
+        '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
+      '</section>' +
+    '</div>' +
+      '<section class="mp-card">' +
+        '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
+        utilityChartHTML(mk) +
+      '</section>';
+  }
+
   // ---------- 대출 탭 ----------
   function renderLoan(){
     var total = state.loans.reduce(function(s,l){ return s + loanRemaining(l); }, 0);
@@ -1109,6 +1192,8 @@
         uiFlags.expandedLoans = {};
         uiFlags.editingLoanSettings = {};
         uiFlags.showAddLoan = false;
+      } else if(state.activeTab === "utility"){
+        state.utilities = {};
       }
       saveState(); render();
       return;
@@ -1442,6 +1527,13 @@
       lm.budget = parseMoneyValue(el.value);
       saveState(); render(); return;
     }
+    if(action === "set-utility-field"){
+      var um = getUtilityMonth(state.currentMonth);
+      var ufield = el.dataset.field;
+      if(ufield === "payDate") um.payDate = el.value;
+      else um[ufield] = Math.abs(parseMoneyValue(el.value));
+      saveState(); render(); return;
+    }
   });
 
   root.addEventListener("submit", function(e){
@@ -1619,7 +1711,8 @@
           familyCategories: imported.familyCategories || d.familyCategories,
           familyData: imported.familyData || {},
           living: imported.living || {},
-          loans: imported.loans || []
+          loans: imported.loans || [],
+          utilities: imported.utilities || {}
         });
         migrateReflectedFlags(merged);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
