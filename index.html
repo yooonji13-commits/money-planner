@@ -1004,7 +1004,10 @@
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + esc(expandedLoan.name) + '</div>' +
-            '<button class="mp-icon-btn mp-edit-icon" data-action="toggle-loan-settings" data-id="' + expandedLoan.id + '" title="대출 정보 수정">' + (editingSettings0 ? '✓' : '✎') + '</button>' +
+            '<span style="display:flex;gap:2px;flex-shrink:0;">' +
+              '<button class="mp-icon-btn mp-edit-icon" data-action="toggle-loan-settings" data-id="' + expandedLoan.id + '" title="대출 정보 수정">' + (editingSettings0 ? '✓' : '✎') + '</button>' +
+              '<button class="mp-icon-btn mp-edit-icon" data-action="delete-loan" data-id="' + expandedLoan.id + '" title="대출 삭제">✕</button>' +
+            '</span>' +
           '</div>' +
           (expandedLoan.startDate ? '<div class="mp-account-purpose">' + fmtDateDots(expandedLoan.startDate) + ' 시작</div>' : '') +
           '<div class="mp-balance-row">' +
@@ -1037,9 +1040,6 @@
                   '<input type="text" class="mp-loan-input" data-action="set-loan-rate" data-id="' + expandedLoan.id + '" value="' + esc(expandedLoan.rate||"") + '" placeholder="예: 3.5"></div>' +
                 '<div class="mp-detail-field"><div class="mp-label">월 상환액</div>' +
                   '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-loan-monthly" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.monthlyPayment||0) + '" placeholder="0"></div>' +
-              '</div>' +
-              '<div class="mp-account-settings-row" style="justify-content:flex-end;">' +
-                '<button class="mp-icon-btn" data-action="delete-loan" data-id="' + expandedLoan.id + '">삭제</button>' +
               '</div>' +
             '</div>'
           ) : "") +
