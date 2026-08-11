@@ -874,13 +874,10 @@
       '</div>' +
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
-        '<div class="mp-label">이번 달 생활비</div>' +
-        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" style="font-size:1.6rem;font-weight:750;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
-        '<div class="mp-row-3">' +
-          '<div class="mp-stat"><div class="v">' + won(spent) + '</div><div class="k">지출 합계</div></div>' +
-          '<div class="mp-stat"><div class="v ' + (remain<0?'neg':'pos') + '">' + won(remain) + '</div><div class="k">잔액</div></div>' +
-          '<div class="mp-stat"><div class="v">' + m.tx.length + '건</div><div class="k">내역 수</div></div>' +
-        '</div>' +
+        '<div class="mp-label">기준 금액</div>' +
+        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
+        '<div class="mp-label" style="margin-top:14px;">이번 달 생활비</div>' +
+        '<div class="mp-total ' + (remain<0?"neg":"pos") + '">' + won(remain) + '</div>' +
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
         '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>' +
       '</section>' +
