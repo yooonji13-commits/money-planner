@@ -276,19 +276,6 @@
   .mp-progress.over > div{ background:var(--negative); }
   .mp-carry-btn{ margin-top:12px; }
 
-  .mp-row-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
-  .mp-stat{ display:flex; flex-direction:column; gap:2px; }
-  .mp-stat .v{ font-variant-numeric:tabular-nums; font-weight:700; font-size:.95rem; }
-  .mp-stat .v.neg{ color:var(--negative); }
-  .mp-stat .v.pos{ color:var(--positive); }
-  .mp-stat .k{ font-size:.68rem; color:var(--muted); letter-spacing:.03em; }
-
-  .mp-category{ display:flex; flex-direction:column; gap:8px; }
-  .mp-category-head{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .mp-category-name{ font-weight:650; font-size:.92rem; }
-  .mp-category-nums{ display:flex; gap:14px; font-size:.78rem; color:var(--muted); flex-wrap:wrap; }
-  .mp-category-nums b{ color:var(--ink); font-variant-numeric:tabular-nums; }
-
   .mp-tx-list{ display:flex; flex-direction:column; }
   .mp-tx-row{
     display:grid; grid-template-columns:38px 1fr 84px auto; gap:6px; align-items:center;
@@ -371,8 +358,8 @@
       생활비
     </button>
     <button class="mp-tab" data-tab="family">
-      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8.5" cy="7.5" r="2.6"/><circle cx="16" cy="8.5" r="2.1"/><path d="M3 19c.8-3.4 2.8-5.2 5.5-5.2S13 15.6 13.8 19"/><path d="M14 19c.6-2.6 2-4 4-4s3.3 1.4 3.8 4"/></svg></span>
-      집안행사
+      <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12c0-3.5 3-6.5 8-6.5 3 0 5 1 6.5 2.5L20 6.5V11l-1.7.5c.2.6.2 1.3.2 2 0 3.5-3 6-8 6s-6.5-2-6.5-2"/><path d="M9 9.2h.01"/><path d="M4 13.5 2.5 15" /><path d="M7 17.5 6 19.5M11 18l-.5 2"/></svg></span>
+      저축
     </button>
     <button class="mp-tab" data-tab="loan">
       <span class="mp-tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/></svg></span>
@@ -403,14 +390,8 @@
       currentMonth: currentMonthKey,
       accounts: [],
       logs: {},
-      familyCategories: [
-        { id: uid(), name: "식비" },
-        { id: uid(), name: "교통비" },
-        { id: uid(), name: "보험" },
-        { id: uid(), name: "통신비" },
-        { id: uid(), name: "구독" }
-      ],
-      familyData: {},
+      savings: {},
+      savingsExpenses: [],
       living: {},
       loans: [],
       utilities: {}
@@ -452,8 +433,8 @@
       var merged = Object.assign(d, parsed, {
         accounts: parsed.accounts || d.accounts,
         logs: parsed.logs || {},
-        familyCategories: parsed.familyCategories || d.familyCategories,
-        familyData: parsed.familyData || {},
+        savings: parsed.savings || {},
+        savingsExpenses: parsed.savingsExpenses || [],
         living: parsed.living || {},
         loans: parsed.loans || [],
         utilities: parsed.utilities || {}
@@ -503,13 +484,20 @@
     return parseInt(p[1],10) + "/" + parseInt(p[2],10);
   }
 
-  function getFamilyMonth(key){
-    if(!state.familyData[key]) state.familyData[key] = {};
-    return state.familyData[key];
+  function getSavingsMonth(key){
+    if(!state.savings[key]) state.savings[key] = { amount: 0, interest: 0, tx: [] };
+    return state.savings[key];
   }
-  function getCategoryEntry(monthObj, catId){
-    if(!monthObj[catId]) monthObj[catId] = { budget: 0, tx: [] };
-    return monthObj[catId];
+  function savingsTxTotal(sm){
+    return (sm.tx || []).reduce(function(s,t){ return s + Number(t.amount||0); }, 0);
+  }
+  function savingsNet(sm){
+    return Number(sm.amount||0) + Number(sm.interest||0) - savingsTxTotal(sm);
+  }
+  function totalSavingsAllTime(){
+    return Object.keys(state.savings).reduce(function(sum, mk){
+      return sum + savingsNet(state.savings[mk]);
+    }, 0);
   }
   function getLivingMonth(key){
     if(!state.living[key]) state.living[key] = { budget: 0, tx: [] };
@@ -552,6 +540,30 @@
     var chartEl = document.querySelector("#mp-main .mp-util-chart");
     if(chartEl) chartEl.outerHTML = utilityChartHTML(mk);
   }
+  function commitPendingSavingsFields(){
+    if(state.activeTab !== "family") return;
+    var container = document.querySelector("#mp-main .mp-hero");
+    if(!container) return;
+    var sm = getSavingsMonth(state.currentMonth);
+    var amountInput = container.querySelector('[data-action="set-savings-amount"]');
+    if(amountInput) sm.amount = parseMoneyValue(amountInput.value);
+    var interestInput = container.querySelector('[data-action="set-savings-interest"]');
+    if(interestInput) sm.interest = parseMoneyValue(interestInput.value);
+  }
+  function updateSavingsDisplay(){
+    var mk = state.currentMonth;
+    var sm = getSavingsMonth(mk);
+    var hero = document.querySelector("#mp-main .mp-hero");
+    if(!hero) return;
+    var totals = hero.querySelectorAll(".mp-total");
+    if(totals[0]) totals[0].textContent = won(totalSavingsAllTime());
+    var netB = hero.querySelector(".mp-loan-stats b");
+    if(netB){
+      var net = savingsNet(sm);
+      netB.textContent = won(net);
+      netB.style.color = net < 0 ? "var(--negative)" : "";
+    }
+  }
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
     return state.logs[accountId];
@@ -561,7 +573,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, expandedCategories:{}, showAddAccount:false, showAddCategory:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{} };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null };
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -649,7 +661,7 @@
     return (negative ? -1 : 1) * Number(digits);
   }
 
-  var TAB_NAMES = { personal: "개인", living: "생활비", family: "집안행사", loan: "대출", utility: "관리비" };
+  var TAB_NAMES = { personal: "개인", living: "생활비", family: "저축", loan: "대출", utility: "관리비" };
   var resetBtn = document.getElementById("mp-reset-btn");
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
@@ -671,7 +683,7 @@
     });
     if(resetBtn) resetBtn.textContent = (TAB_NAMES[state.activeTab] || "") + " 초기화";
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
-    else if(state.activeTab === "family") main.innerHTML = renderFamily();
+    else if(state.activeTab === "family") main.innerHTML = renderSavings();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
     else if(state.activeTab === "utility") main.innerHTML = renderUtility();
     else main.innerHTML = renderLiving();
@@ -871,78 +883,105 @@
   }
 
   // ---------- 가족 탭 ----------
-  function renderFamily(){
+  function renderSavings(){
     var mk = state.currentMonth;
-    var monthObj = getFamilyMonth(mk);
-    var totalBudget = 0, totalActual = 0;
+    var sm = getSavingsMonth(mk);
+    var txTotal = savingsTxTotal(sm);
+    var net = savingsNet(sm);
+    var totalAll = totalSavingsAllTime();
+    var showAnnual = uiFlags.showAnnualExpenses;
+    var txSorted = (sm.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var editingId = uiFlags.editingSavingsTx;
 
-    var catsHtml = state.familyCategories.map(function(cat){
-      var entry = getCategoryEntry(monthObj, cat.id);
-      var actual = entry.tx.reduce(function(s,t){ return s + Number(t.amount||0); }, 0);
-      totalBudget += Number(entry.budget||0);
-      totalActual += actual;
-      var remain = Number(entry.budget||0) - actual;
-      var pct = entry.budget > 0 ? Math.min(100, (actual/entry.budget)*100) : (actual>0?100:0);
-      var barClass = actual > entry.budget && entry.budget>0 ? "over" : (pct>=85 ? "warn" : "");
-      var expanded = !!uiFlags.expandedCategories[cat.id];
-      var txSorted = entry.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-
-      return '<div class="mp-card mp-category">' +
-        '<div class="mp-category-head">' +
-          '<div class="mp-category-name">' + esc(cat.name) + '</div>' +
-          '<button class="mp-icon-btn" data-action="delete-category" data-id="' + cat.id + '">삭제</button>' +
-        '</div>' +
-        '<div class="mp-category-nums">' +
-          '<span>예산 <input type="number" inputmode="decimal" data-action="set-budget" data-cat="' + cat.id + '" value="' + entry.budget + '" style="width:90px;"></span>' +
-          '<span>지출 <b>' + won(actual) + '</b></span>' +
-          '<span>남음 <b style="' + (remain<0?'color:var(--negative);':'') + '">' + won(remain) + '</b></span>' +
-        '</div>' +
-        '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
-        '<button class="mp-log-toggle" data-action="toggle-category" data-id="' + cat.id + '" style="margin-top:8px;">' +
-          (expanded ? '내역 접기' : (entry.tx.length ? '내역 보기 (' + entry.tx.length + ')' : '내역 추가')) +
-        '</button>' +
-        (expanded ? (
-          '<div class="mp-tx-list">' +
-            txSorted.map(function(t){
-              return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
-                '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-                '<span class="mp-tx-amt">-' + won(t.amount).replace("-","") + '</span>' +
-                '<button class="mp-icon-btn" data-action="delete-family-tx" data-cat="' + cat.id + '" data-id="' + t.id + '">✕</button>' +
-              '</div>';
-            }).join("") +
-          '</div>' +
-          '<form class="mp-tx-add" data-action="add-family-tx" data-cat="' + cat.id + '">' +
-            '<input type="date" name="date" value="' + todayISO + '" required>' +
-            '<input type="text" name="memo" placeholder="내용">' +
-            '<input type="number" inputmode="decimal" name="amount" placeholder="금액" required min="0" step="1">' +
-            '<button class="mp-btn small" type="submit">추가</button>' +
-          '</form>'
-        ) : "") +
-      '</div>';
-    }).join("");
-
-    var totalRemain = totalBudget - totalActual;
-
-    return '<div class="mp-month-switch">' +
+    return '<div class="mp-tab-sticky">' +
+      '<div class="mp-month-switch">' +
         '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
-        '<div class="mp-month-label">' + monthLabel(mk) + ' 집안행사</div>' +
+        '<div class="mp-month-label" data-action="toggle-month-picker" style="cursor:pointer;">' + monthLabel(mk) + ' 저축 ' + (uiFlags.showMonthPicker ? '▴' : '▾') + '</div>' +
         '<button class="mp-month-btn" data-action="month-next">›</button>' +
       '</div>' +
+      (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
-        '<div class="mp-label">이번 달 요약</div>' +
-        '<div class="mp-row-3">' +
-          '<div class="mp-stat"><div class="v">' + won(totalBudget) + '</div><div class="k">총 예산</div></div>' +
-          '<div class="mp-stat"><div class="v">' + won(totalActual) + '</div><div class="k">총 지출</div></div>' +
-          '<div class="mp-stat"><div class="v ' + (totalRemain<0?'neg':'pos') + '">' + won(totalRemain) + '</div><div class="k">남은 예산</div></div>' +
+        '<div class="mp-label">총 저축액</div>' +
+        '<div class="mp-total ' + (totalAll<0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(totalAll) + '</div>' +
+        '<div class="mp-loan-meta" style="margin-top:14px;">' +
+          '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"></div>' +
+          '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"></div>' +
         '</div>' +
+        '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
+        '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
+        '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
       '</section>' +
-      catsHtml +
-      (uiFlags.showAddCategory ?
-        '<form class="mp-add-account-form" data-action="add-category">' +
-          '<input type="text" name="name" placeholder="카테고리 이름" required style="flex:1;">' +
-          '<button class="mp-btn small" type="submit">추가</button>' +
-        '</form>' :
-        '<button class="mp-btn ghost block" data-action="show-add-category">+ 카테고리 추가</button>');
+      '<form class="mp-tx-add-personal" data-action="add-savings-tx">' +
+        '<input type="date" name="date" value="' + todayISO + '" required>' +
+        '<input type="text" name="memo" placeholder="사용 내용">' +
+        '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+        '<button class="mp-btn small" type="submit">추가</button>' +
+      '</form>' +
+      '<div class="mp-tools-row">' +
+        '<button class="mp-fixed-toggle-btn' + (showAnnual ? ' active' : '') + '" data-action="toggle-annual-expenses">' + (showAnnual ? '연례지출내역 접기 ▴' : '연례지출내역 ▾') + '</button>' +
+      '</div>' +
+      (showAnnual ? renderAnnualExpensesHTML() : '') +
+    '</div>' +
+      '<section class="mp-card mp-log-card">' +
+        (txSorted.length ?
+        '<div class="mp-log">' +
+          txSorted.map(function(t){
+            if(editingId === t.id){
+              return '<form class="mp-tx-edit" data-action="save-edit-savings-tx" data-id="' + t.id + '">' +
+                '<input type="date" name="date" value="' + t.date + '" required>' +
+                '<input type="text" name="memo" placeholder="내용" value="' + esc(t.memo||"") + '">' +
+                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
+                '<div class="mp-tx-edit-actions">' +
+                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-savings-tx">취소</button>' +
+                  '<button type="submit" class="mp-btn small">저장</button>' +
+                '</div>' +
+              '</form>';
+            }
+            return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
+              '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
+              '<span class="mp-tx-amt">-' + won(t.amount).replace("-","") + '</span>' +
+              '<span style="display:flex;gap:2px;">' +
+                '<button class="mp-icon-btn" data-action="start-edit-savings-tx" data-id="' + t.id + '">✎</button>' +
+                '<button class="mp-icon-btn" data-action="delete-savings-tx" data-id="' + t.id + '">✕</button>' +
+              '</span></div>';
+          }).join("") +
+        '</div>'
+        : '<div class="mp-empty">이번 달 사용 내역이 없어요</div>') +
+      '</section>';
+  }
+
+  function renderAnnualExpensesHTML(){
+    var list = state.savingsExpenses || [];
+    var editingFx = uiFlags.editingAnnualExpense;
+    return '<div class="mp-detail-field"><div class="mp-label">연례지출내역</div>' +
+      (list.length ?
+        '<div class="mp-fixed-list">' +
+          list.map(function(fx){
+            if(editingFx === fx.id){
+              return '<form class="mp-fixed-edit" data-action="save-annual-expense" data-id="' + fx.id + '">' +
+                '<input type="text" name="name" value="' + esc(fx.name) + '" placeholder="이름" required>' +
+                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(fx.amount) + '" placeholder="금액" required>' +
+                '<button type="button" class="mp-icon-btn" data-action="cancel-edit-annual-expense">취소</button>' +
+                '<button type="submit" class="mp-btn small">저장</button>' +
+              '</form>';
+            }
+            return '<div class="mp-fixed-row">' +
+              '<span class="mp-fixed-name">' + esc(fx.name) + '</span>' +
+              '<span class="mp-fixed-amt">' + won(fx.amount) + '</span>' +
+              '<button class="mp-icon-btn" data-action="start-edit-annual-expense" data-id="' + fx.id + '">✎</button>' +
+              '<button class="mp-icon-btn" data-action="delete-annual-expense" data-id="' + fx.id + '">✕</button>' +
+            '</div>';
+          }).join("") +
+        '</div>'
+      : '') +
+      '<form class="mp-fixed-add" data-action="add-annual-expense">' +
+        '<input type="text" name="name" placeholder="이름 (예: 자동차보험)" required>' +
+        '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+        '<button type="submit" class="mp-btn small">추가</button>' +
+      '</form>' +
+    '</div>';
   }
 
   // ---------- 월 생활비 탭 ----------
@@ -1201,6 +1240,7 @@
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
       commitPendingUtilityFields();
+      commitPendingSavingsFields();
       state.activeTab = btn.dataset.tab;
       saveState(); render();
     });
@@ -1227,10 +1267,11 @@
         uiFlags.editingLivingTx = null;
         uiFlags.showMonthPicker = false;
       } else if(state.activeTab === "family"){
-        state.familyCategories = defaultState().familyCategories;
-        state.familyData = {};
-        uiFlags.expandedCategories = {};
-        uiFlags.showAddCategory = false;
+        state.savings = {};
+        state.savingsExpenses = [];
+        uiFlags.showAnnualExpenses = false;
+        uiFlags.editingAnnualExpense = null;
+        uiFlags.editingSavingsTx = null;
       } else if(state.activeTab === "loan"){
         state.loans = [];
         uiFlags.expandedLoans = {};
@@ -1321,7 +1362,38 @@
       setTimeout(function(){ el.textContent = original; }, 1200);
       return;
     }
-    if(action === "show-add-category"){ uiFlags.showAddCategory = true; render(); return; }
+    if(action === "toggle-annual-expenses"){
+      uiFlags.showAnnualExpenses = !uiFlags.showAnnualExpenses;
+      if(!uiFlags.showAnnualExpenses) uiFlags.editingAnnualExpense = null;
+      render(); return;
+    }
+    if(action === "start-edit-annual-expense"){
+      uiFlags.editingAnnualExpense = el.dataset.id;
+      render(); return;
+    }
+    if(action === "cancel-edit-annual-expense"){
+      uiFlags.editingAnnualExpense = null;
+      render(); return;
+    }
+    if(action === "delete-annual-expense"){
+      state.savingsExpenses = state.savingsExpenses.filter(function(f){ return f.id !== el.dataset.id; });
+      if(uiFlags.editingAnnualExpense === el.dataset.id) uiFlags.editingAnnualExpense = null;
+      saveState(); render(); return;
+    }
+    if(action === "start-edit-savings-tx"){
+      uiFlags.editingSavingsTx = el.dataset.id;
+      render(); return;
+    }
+    if(action === "cancel-edit-savings-tx"){
+      uiFlags.editingSavingsTx = null;
+      render(); return;
+    }
+    if(action === "delete-savings-tx"){
+      var sm = getSavingsMonth(state.currentMonth);
+      sm.tx = (sm.tx||[]).filter(function(t){ return t.id !== el.dataset.id; });
+      if(uiFlags.editingSavingsTx === el.dataset.id) uiFlags.editingSavingsTx = null;
+      saveState(); render(); return;
+    }
 
     if(action === "delete-account"){
       if(!confirm("이 계좌를 삭제할까요? 기록도 함께 삭제돼요.")) return;
@@ -1375,12 +1447,6 @@
       render(); return;
     }
 
-    if(action === "delete-category"){
-      if(!confirm("이 카테고리를 삭제할까요? 이번 달 내역도 함께 삭제돼요.")) return;
-      state.familyCategories = state.familyCategories.filter(function(c){ return c.id !== el.dataset.id; });
-      saveState(); render(); return;
-    }
-
     if(action === "toggle-log"){
       var toggleId = el.dataset.id;
       var pendingInput = main.querySelector('.mp-balance-edit[data-id="' + toggleId + '"]');
@@ -1394,11 +1460,6 @@
       if(!willExpand){ uiFlags.editingSettings[toggleId] = false; uiFlags.editingFixed = null; uiFlags.showFixed[toggleId] = false; }
       saveState(); render(); return;
     }
-    if(action === "toggle-category"){
-      uiFlags.expandedCategories[el.dataset.id] = !uiFlags.expandedCategories[el.dataset.id];
-      render(); return;
-    }
-
     if(action === "delete-tx"){
       var log = getLog(el.dataset.account);
       state.logs[el.dataset.account] = log.filter(function(t){ return t.id !== el.dataset.id; });
@@ -1429,13 +1490,6 @@
       render(); return;
     }
 
-    if(action === "delete-family-tx"){
-      var monthObj = getFamilyMonth(state.currentMonth);
-      var entry2 = getCategoryEntry(monthObj, el.dataset.cat);
-      entry2.tx = entry2.tx.filter(function(t){ return t.id !== el.dataset.id; });
-      saveState(); render(); return;
-    }
-
     if(action === "delete-living-tx"){
       var lm = getLivingMonth(state.currentMonth);
       lm.tx = lm.tx.filter(function(t){ return t.id !== el.dataset.id; });
@@ -1452,8 +1506,8 @@
       render(); return;
     }
 
-    if(action === "month-prev"){ commitPendingUtilityFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
-    if(action === "month-next"){ commitPendingUtilityFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
+    if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
     if(action === "save-utility"){
       commitPendingUtilityFields();
@@ -1531,6 +1585,26 @@
       var liveTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
       if(liveTotalEl) liveTotalEl.textContent = won(liveUtilityTotalFromDOM());
     }
+
+    if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest"){
+      var savingsHero = document.querySelector("#mp-main .mp-hero");
+      if(savingsHero){
+        var amountInput = savingsHero.querySelector('[data-action="set-savings-amount"]');
+        var interestInput = savingsHero.querySelector('[data-action="set-savings-interest"]');
+        var liveAmount = Math.abs(parseMoneyValue(amountInput.value));
+        var liveInterest = Math.abs(parseMoneyValue(interestInput.value));
+        var smLive = getSavingsMonth(state.currentMonth);
+        var liveNet = liveAmount + liveInterest - savingsTxTotal(smLive);
+        var liveTotalAll = totalSavingsAllTime() - savingsNet(smLive) + liveNet;
+        var savingsTotals = savingsHero.querySelectorAll(".mp-total");
+        if(savingsTotals[0]) savingsTotals[0].textContent = won(liveTotalAll);
+        var savingsNetB = savingsHero.querySelector(".mp-loan-stats b");
+        if(savingsNetB){
+          savingsNetB.textContent = won(liveNet);
+          savingsNetB.style.color = liveNet < 0 ? "var(--negative)" : "";
+        }
+      }
+    }
   });
 
   root.addEventListener("change", function(e){
@@ -1574,11 +1648,15 @@
       if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); render(); }
       return;
     }
-    if(action === "set-budget"){
-      var monthObj = getFamilyMonth(state.currentMonth);
-      var entry = getCategoryEntry(monthObj, el.dataset.cat);
-      entry.budget = val;
-      saveState(); render(); return;
+    if(action === "set-savings-amount"){
+      var smA = getSavingsMonth(state.currentMonth);
+      smA.amount = parseMoneyValue(el.value);
+      saveState(); updateSavingsDisplay(); return;
+    }
+    if(action === "set-savings-interest"){
+      var smI = getSavingsMonth(state.currentMonth);
+      smI.interest = parseMoneyValue(el.value);
+      saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-living-budget"){
       var lm = getLivingMonth(state.currentMonth);
@@ -1605,6 +1683,7 @@
 
     if(action === "goto-month"){
       commitPendingUtilityFields();
+      commitPendingSavingsFields();
       var gy = fd.get("year");
       var gm = String(fd.get("month")).padStart(2, "0");
       state.currentMonth = gy + "-" + gm;
@@ -1662,11 +1741,22 @@
       saveState(); render(); return;
     }
 
-    if(action === "add-category"){
-      var cname = (fd.get("name")||"").trim();
-      if(!cname) return;
-      state.familyCategories.push({ id: uid(), name: cname });
-      uiFlags.showAddCategory = false;
+    if(action === "add-annual-expense"){
+      var aeName = (fd.get("name")||"").trim();
+      var aeAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(!aeName || aeAmount <= 0) return;
+      state.savingsExpenses.push({ id: uid(), name: aeName, amount: aeAmount });
+      saveState(); render(); return;
+    }
+    if(action === "save-annual-expense"){
+      var aeEntry = state.savingsExpenses.find(function(f){ return f.id === form.dataset.id; });
+      if(!aeEntry) return;
+      var newAeName = (fd.get("name")||"").trim();
+      var newAeAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(!newAeName || newAeAmount <= 0) return;
+      aeEntry.name = newAeName;
+      aeEntry.amount = newAeAmount;
+      uiFlags.editingAnnualExpense = null;
       saveState(); render(); return;
     }
 
@@ -1707,14 +1797,27 @@
       saveState(); render(); return;
     }
 
-    if(action === "add-family-tx"){
-      var catId = form.dataset.cat;
-      var amt = Math.abs(Number(fd.get("amount")) || 0);
-      if(amt <= 0) return;
-      var monthObj = getFamilyMonth(state.currentMonth);
-      var entry = getCategoryEntry(monthObj, catId);
-      entry.tx.push({ id: uid(), date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt });
-      uiFlags.expandedCategories[catId] = true;
+    if(action === "add-savings-tx"){
+      var svAmt = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(svAmt <= 0) return;
+      var svm = getSavingsMonth(state.currentMonth);
+      var svNewId = uid();
+      svm.tx.push({ id: svNewId, date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, ts: Date.now() });
+      form.reset();
+      saveState(); render();
+      scrollRowIntoView(svNewId);
+      return;
+    }
+    if(action === "save-edit-savings-tx"){
+      var svm2 = getSavingsMonth(state.currentMonth);
+      var svEntry = (svm2.tx||[]).find(function(t){ return t.id === form.dataset.id; });
+      if(!svEntry) return;
+      var newSvAmt = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(newSvAmt <= 0) return;
+      svEntry.amount = newSvAmt;
+      svEntry.date = fd.get("date") || svEntry.date;
+      svEntry.memo = (fd.get("memo")||"").trim();
+      uiFlags.editingSavingsTx = null;
       saveState(); render(); return;
     }
 
@@ -1769,8 +1872,8 @@
         var merged = Object.assign(d, imported, {
           accounts: imported.accounts || d.accounts,
           logs: imported.logs || {},
-          familyCategories: imported.familyCategories || d.familyCategories,
-          familyData: imported.familyData || {},
+          savings: imported.savings || {},
+          savingsExpenses: imported.savingsExpenses || [],
           living: imported.living || {},
           loans: imported.loans || [],
           utilities: imported.utilities || {}
