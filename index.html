@@ -851,7 +851,7 @@
             '<div class="mp-balance-row">' +
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">기준 잔액</div>' +
-                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + acc.id + '" value="' + formatNumberString(acc.balance) + '" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' +
+                '<div class="mp-balance-edit" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' + formatNumberString(acc.balance) + '</div>' +
               '</div>' +
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">총 보유자산</div>' +
