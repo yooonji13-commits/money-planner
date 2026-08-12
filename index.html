@@ -526,6 +526,24 @@
   function utilityTotal(u){
     return Number(u.community||0) + Number(u.electricity||0) + Number(u.water||0) + Number(u.heating||0) + Number(u.other||0);
   }
+  function liveUtilityTotalFromDOM(){
+    var container = document.querySelector("#mp-main .mp-hero");
+    if(!container) return 0;
+    var fields = ["community","electricity","water","heating","other"];
+    var sum = 0;
+    fields.forEach(function(f){
+      var input = container.querySelector('[data-field="' + f + '"]');
+      if(input) sum += Math.abs(parseMoneyValue(input.value));
+    });
+    return sum;
+  }
+  function updateUtilityDisplay(){
+    var mk = state.currentMonth;
+    var totalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(totalEl) totalEl.textContent = won(utilityTotal(getUtilityMonth(mk)));
+    var chartEl = document.querySelector("#mp-main .mp-util-chart");
+    if(chartEl) chartEl.outerHTML = utilityChartHTML(mk);
+  }
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
     return state.logs[accountId];
@@ -1473,6 +1491,11 @@
     }
     if(digitsBefore === 0) pos = (negative && formatted.charAt(0)==="-") ? 1 : 0;
     el.setSelectionRange(pos, pos);
+
+    if(el.dataset.action === "set-utility-field"){
+      var liveTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+      if(liveTotalEl) liveTotalEl.textContent = won(liveUtilityTotalFromDOM());
+    }
   });
 
   root.addEventListener("change", function(e){
@@ -1532,7 +1555,9 @@
       var ufield = el.dataset.field;
       if(ufield === "payDate") um.payDate = el.value;
       else um[ufield] = Math.abs(parseMoneyValue(el.value));
-      saveState(); render(); return;
+      saveState();
+      updateUtilityDisplay();
+      return;
     }
   });
 
