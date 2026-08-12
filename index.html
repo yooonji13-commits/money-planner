@@ -537,6 +537,18 @@
     });
     return sum;
   }
+  function commitPendingUtilityFields(){
+    if(state.activeTab !== "utility") return;
+    var container = document.querySelector("#mp-main .mp-hero");
+    if(!container) return;
+    var um = getUtilityMonth(state.currentMonth);
+    var dateInput = container.querySelector('[data-field="payDate"]');
+    if(dateInput) um.payDate = dateInput.value;
+    ["community","electricity","water","heating","other"].forEach(function(f){
+      var input = container.querySelector('[data-field="' + f + '"]');
+      if(input) um[f] = Math.abs(parseMoneyValue(input.value));
+    });
+  }
   function updateUtilityDisplay(){
     var mk = state.currentMonth;
     var totalEl = document.querySelector("#mp-main .mp-hero .mp-total");
@@ -1061,6 +1073,7 @@
         '</div>' +
         '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
         '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
+        '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
       '</section>' +
     '</div>' +
       '<section class="mp-card">' +
@@ -1175,6 +1188,7 @@
   // ---------- events ----------
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
+      commitPendingUtilityFields();
       state.activeTab = btn.dataset.tab;
       saveState(); render();
     });
@@ -1426,9 +1440,18 @@
       render(); return;
     }
 
-    if(action === "month-prev"){ state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
-    if(action === "month-next"){ state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    if(action === "month-prev"){ commitPendingUtilityFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
+    if(action === "month-next"){ commitPendingUtilityFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
+    if(action === "save-utility"){
+      commitPendingUtilityFields();
+      saveState();
+      var savedLabel = el.textContent;
+      el.textContent = "저장됨 ✓";
+      el.disabled = true;
+      setTimeout(function(){ el.textContent = savedLabel; el.disabled = false; }, 1200);
+      return;
+    }
   });
 
   var lastDateTap = { id: null, time: 0 };
@@ -1569,6 +1592,7 @@
     var fd = new FormData(form);
 
     if(action === "goto-month"){
+      commitPendingUtilityFields();
       var gy = fd.get("year");
       var gm = String(fd.get("month")).padStart(2, "0");
       state.currentMonth = gy + "-" + gm;
