@@ -150,6 +150,11 @@
   .mp-fixed-add{ display:grid; grid-template-columns:1fr 100px auto; gap:6px; margin-top:8px; }
   .mp-fixed-add input, .mp-fixed-edit input{ width:100%; }
   .mp-fixed-edit{ display:grid; grid-template-columns:1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
+  .mp-fixed-month{ font-size:.78rem; color:var(--muted); font-weight:650; white-space:nowrap; }
+  .mp-annual-row{ grid-template-columns:36px 1fr auto auto auto; }
+  .mp-annual-add{ display:grid; grid-template-columns:56px 1fr 100px auto; gap:6px; margin-top:8px; }
+  .mp-annual-add input, .mp-annual-edit input, .mp-annual-add select, .mp-annual-edit select{ width:100%; }
+  .mp-annual-edit{ display:grid; grid-template-columns:56px 1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
   .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
@@ -541,8 +546,8 @@
     if(chartEl) chartEl.outerHTML = utilityChartHTML(mk);
   }
   function commitPendingSavingsFields(){
-    if(state.activeTab !== "family") return;
-    var container = document.querySelector("#mp-main .mp-hero");
+    if(state.activeTab !== "family" || !uiFlags.savingsExpanded) return;
+    var container = document.querySelector("#mp-main .mp-account.is-expanded");
     if(!container) return;
     var sm = getSavingsMonth(state.currentMonth);
     var amountInput = container.querySelector('[data-action="set-savings-amount"]');
@@ -553,15 +558,21 @@
   function updateSavingsDisplay(){
     var mk = state.currentMonth;
     var sm = getSavingsMonth(mk);
-    var hero = document.querySelector("#mp-main .mp-hero");
-    if(!hero) return;
-    var totals = hero.querySelectorAll(".mp-total");
-    if(totals[0]) totals[0].textContent = won(totalSavingsAllTime());
-    var netB = hero.querySelector(".mp-loan-stats b");
-    if(netB){
-      var net = savingsNet(sm);
-      netB.textContent = won(net);
-      netB.style.color = net < 0 ? "var(--negative)" : "";
+    var totalAll = totalSavingsAllTime();
+    var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(heroTotalEl){
+      heroTotalEl.textContent = won(totalAll);
+      heroTotalEl.classList.toggle("neg", totalAll < 0);
+      heroTotalEl.classList.toggle("pos", totalAll >= 0);
+    }
+    var card = document.querySelector("#mp-main .mp-account.is-expanded");
+    if(card){
+      var netB = card.querySelector(".mp-loan-stats b");
+      if(netB){
+        var net = savingsNet(sm);
+        netB.textContent = won(net);
+        netB.style.color = net < 0 ? "var(--negative)" : "";
+      }
     }
   }
   function getLog(accountId){
@@ -573,7 +584,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false };
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -885,46 +896,67 @@
   // ---------- 가족 탭 ----------
   function renderSavings(){
     var mk = state.currentMonth;
-    var sm = getSavingsMonth(mk);
-    var txTotal = savingsTxTotal(sm);
-    var net = savingsNet(sm);
+    var year = parseInt(mk.slice(0,4), 10);
+    var expanded = uiFlags.savingsExpanded;
     var totalAll = totalSavingsAllTime();
     var showAnnual = uiFlags.showAnnualExpenses;
-    var txSorted = (sm.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-    var editingId = uiFlags.editingSavingsTx;
 
-    return '<div class="mp-tab-sticky">' +
-      '<div class="mp-month-switch">' +
-        '<button class="mp-month-btn" data-action="month-prev">‹</button>' +
-        '<div class="mp-month-label" data-action="toggle-month-picker" style="cursor:pointer;">' + monthLabel(mk) + ' 저축 ' + (uiFlags.showMonthPicker ? '▴' : '▾') + '</div>' +
-        '<button class="mp-month-btn" data-action="month-next">›</button>' +
-      '</div>' +
-      (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
+    var html = '<div class="mp-tab-sticky">' +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">총 저축액</div>' +
         '<div class="mp-total ' + (totalAll<0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(totalAll) + '</div>' +
-        '<div class="mp-loan-meta" style="margin-top:14px;">' +
-          '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"></div>' +
-          '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"></div>' +
-        '</div>' +
-        '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
-        '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
-        '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
       '</section>' +
-      '<form class="mp-tx-add-personal" data-action="add-savings-tx">' +
-        '<input type="date" name="date" value="' + todayISO + '" required>' +
-        '<input type="text" name="memo" placeholder="사용 내용">' +
-        '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
-        '<button class="mp-btn small" type="submit">추가</button>' +
-      '</form>' +
+      (expanded ?
+        '<button class="mp-btn ghost block" data-action="toggle-savings-month">← 뒤로가기</button>' :
+        '<div class="mp-month-switch">' +
+          '<button class="mp-month-btn" data-action="savings-year-prev">‹</button>' +
+          '<div class="mp-month-label">' + year + '년 저축</div>' +
+          '<button class="mp-month-btn" data-action="savings-year-next">›</button>' +
+        '</div>') +
       '<div class="mp-tools-row">' +
         '<button class="mp-fixed-toggle-btn' + (showAnnual ? ' active' : '') + '" data-action="toggle-annual-expenses">' + (showAnnual ? '연례지출내역 접기 ▴' : '연례지출내역 ▾') + '</button>' +
       '</div>' +
-      (showAnnual ? renderAnnualExpensesHTML() : '') +
-    '</div>' +
-      '<section class="mp-card mp-log-card">' +
+      (showAnnual ? renderAnnualExpensesHTML() : '');
+
+    if(expanded){
+      var sm = getSavingsMonth(mk);
+      var txTotal = savingsTxTotal(sm);
+      var net = savingsNet(sm);
+      var monthNum = parseInt(mk.slice(5,7), 10);
+
+      html += '<div class="mp-account is-expanded">' +
+        '<div class="mp-account-body">' +
+          '<div class="mp-account-name-row">' +
+            '<div class="mp-account-name">' + monthNum + '월</div>' +
+          '</div>' +
+          '<div class="mp-loan-meta">' +
+            '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"></div>' +
+            '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"></div>' +
+          '</div>' +
+          '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
+          '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
+          '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
+        '</div>' +
+        '<div class="mp-account-detail">' +
+          '<form class="mp-tx-add-personal" data-action="add-savings-tx">' +
+            '<input type="date" name="date" value="' + todayISO + '" required>' +
+            '<input type="text" name="memo" placeholder="사용 내용">' +
+            '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+            '<button class="mp-btn small" type="submit">추가</button>' +
+          '</form>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div>';
+
+    if(expanded){
+      var sm2 = getSavingsMonth(mk);
+      var txSorted = (sm2.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+      var editingId = uiFlags.editingSavingsTx;
+
+      html += '<section class="mp-card mp-log-card">' +
         (txSorted.length ?
         '<div class="mp-log">' +
           txSorted.map(function(t){
@@ -950,24 +982,53 @@
         '</div>'
         : '<div class="mp-empty">이번 달 사용 내역이 없어요</div>') +
       '</section>';
+    } else {
+      html += '<div class="mp-accounts-grid">';
+      for(var m = 1; m <= 12; m++){
+        var mmk = year + "-" + String(m).padStart(2,"0");
+        var msm = state.savings[mmk] || { amount:0, interest:0, tx:[] };
+        var mnet = savingsNet(msm);
+        html += '<div class="mp-account" data-action="toggle-savings-month" data-id="' + mmk + '">' +
+          '<div class="mp-account-body">' +
+            '<div class="mp-account-name">' + m + '월</div>' +
+            '<div class="mp-balance-label">순저축</div>' +
+            '<div class="mp-account-total' + (mnet<0?' neg':'') + '">' + won(mnet) + '</div>' +
+          '</div>' +
+        '</div>';
+      }
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  function monthOptionsHTML(selected){
+    var out = "";
+    for(var m = 1; m <= 12; m++){
+      out += '<option value="' + m + '"' + (m === selected ? ' selected' : '') + '>' + m + '월</option>';
+    }
+    return out;
   }
 
   function renderAnnualExpensesHTML(){
     var list = state.savingsExpenses || [];
     var editingFx = uiFlags.editingAnnualExpense;
+    var nowMonth = parseInt(state.currentMonth.slice(5,7), 10);
     return '<div class="mp-detail-field"><div class="mp-label">연례지출내역</div>' +
       (list.length ?
         '<div class="mp-fixed-list">' +
-          list.map(function(fx){
+          list.slice().sort(function(a,b){ return (a.month||0) - (b.month||0); }).map(function(fx){
             if(editingFx === fx.id){
-              return '<form class="mp-fixed-edit" data-action="save-annual-expense" data-id="' + fx.id + '">' +
+              return '<form class="mp-annual-edit" data-action="save-annual-expense" data-id="' + fx.id + '">' +
+                '<select name="month">' + monthOptionsHTML(fx.month||nowMonth) + '</select>' +
                 '<input type="text" name="name" value="' + esc(fx.name) + '" placeholder="이름" required>' +
                 '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(fx.amount) + '" placeholder="금액" required>' +
                 '<button type="button" class="mp-icon-btn" data-action="cancel-edit-annual-expense">취소</button>' +
                 '<button type="submit" class="mp-btn small">저장</button>' +
               '</form>';
             }
-            return '<div class="mp-fixed-row">' +
+            return '<div class="mp-fixed-row mp-annual-row">' +
+              '<span class="mp-fixed-month">' + (fx.month||nowMonth) + '월</span>' +
               '<span class="mp-fixed-name">' + esc(fx.name) + '</span>' +
               '<span class="mp-fixed-amt">' + won(fx.amount) + '</span>' +
               '<button class="mp-icon-btn" data-action="start-edit-annual-expense" data-id="' + fx.id + '">✎</button>' +
@@ -976,7 +1037,8 @@
           }).join("") +
         '</div>'
       : '') +
-      '<form class="mp-fixed-add" data-action="add-annual-expense">' +
+      '<form class="mp-annual-add" data-action="add-annual-expense">' +
+        '<select name="month">' + monthOptionsHTML(nowMonth) + '</select>' +
         '<input type="text" name="name" placeholder="이름 (예: 자동차보험)" required>' +
         '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
         '<button type="submit" class="mp-btn small">추가</button>' +
@@ -1272,6 +1334,7 @@
         uiFlags.showAnnualExpenses = false;
         uiFlags.editingAnnualExpense = null;
         uiFlags.editingSavingsTx = null;
+        uiFlags.savingsExpanded = false;
       } else if(state.activeTab === "loan"){
         state.loans = [];
         uiFlags.expandedLoans = {};
@@ -1366,6 +1429,27 @@
       uiFlags.showAnnualExpenses = !uiFlags.showAnnualExpenses;
       if(!uiFlags.showAnnualExpenses) uiFlags.editingAnnualExpense = null;
       render(); return;
+    }
+    if(action === "toggle-savings-month"){
+      commitPendingSavingsFields();
+      if(el.dataset.id){
+        state.currentMonth = el.dataset.id;
+        uiFlags.savingsExpanded = true;
+      } else {
+        uiFlags.savingsExpanded = false;
+      }
+      uiFlags.editingSavingsTx = null;
+      saveState(); render(); return;
+    }
+    if(action === "savings-year-prev"){
+      commitPendingSavingsFields();
+      state.currentMonth = shiftMonth(state.currentMonth, -12);
+      saveState(); render(); return;
+    }
+    if(action === "savings-year-next"){
+      commitPendingSavingsFields();
+      state.currentMonth = shiftMonth(state.currentMonth, 12);
+      saveState(); render(); return;
     }
     if(action === "start-edit-annual-expense"){
       uiFlags.editingAnnualExpense = el.dataset.id;
@@ -1587,18 +1671,18 @@
     }
 
     if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest"){
-      var savingsHero = document.querySelector("#mp-main .mp-hero");
-      if(savingsHero){
-        var amountInput = savingsHero.querySelector('[data-action="set-savings-amount"]');
-        var interestInput = savingsHero.querySelector('[data-action="set-savings-interest"]');
+      var savingsCard = document.querySelector("#mp-main .mp-account.is-expanded");
+      if(savingsCard){
+        var amountInput = savingsCard.querySelector('[data-action="set-savings-amount"]');
+        var interestInput = savingsCard.querySelector('[data-action="set-savings-interest"]');
         var liveAmount = Math.abs(parseMoneyValue(amountInput.value));
         var liveInterest = Math.abs(parseMoneyValue(interestInput.value));
         var smLive = getSavingsMonth(state.currentMonth);
         var liveNet = liveAmount + liveInterest - savingsTxTotal(smLive);
         var liveTotalAll = totalSavingsAllTime() - savingsNet(smLive) + liveNet;
-        var savingsTotals = savingsHero.querySelectorAll(".mp-total");
-        if(savingsTotals[0]) savingsTotals[0].textContent = won(liveTotalAll);
-        var savingsNetB = savingsHero.querySelector(".mp-loan-stats b");
+        var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+        if(heroTotalEl) heroTotalEl.textContent = won(liveTotalAll);
+        var savingsNetB = savingsCard.querySelector(".mp-loan-stats b");
         if(savingsNetB){
           savingsNetB.textContent = won(liveNet);
           savingsNetB.style.color = liveNet < 0 ? "var(--negative)" : "";
@@ -1744,8 +1828,9 @@
     if(action === "add-annual-expense"){
       var aeName = (fd.get("name")||"").trim();
       var aeAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      var aeMonth = Math.min(12, Math.max(1, parseInt(fd.get("month"), 10) || 1));
       if(!aeName || aeAmount <= 0) return;
-      state.savingsExpenses.push({ id: uid(), name: aeName, amount: aeAmount });
+      state.savingsExpenses.push({ id: uid(), name: aeName, amount: aeAmount, month: aeMonth });
       saveState(); render(); return;
     }
     if(action === "save-annual-expense"){
@@ -1753,9 +1838,11 @@
       if(!aeEntry) return;
       var newAeName = (fd.get("name")||"").trim();
       var newAeAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      var newAeMonth = Math.min(12, Math.max(1, parseInt(fd.get("month"), 10) || 1));
       if(!newAeName || newAeAmount <= 0) return;
       aeEntry.name = newAeName;
       aeEntry.amount = newAeAmount;
+      aeEntry.month = newAeMonth;
       uiFlags.editingAnnualExpense = null;
       saveState(); render(); return;
     }
