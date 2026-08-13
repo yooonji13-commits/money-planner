@@ -109,6 +109,17 @@
   .mp-accounts-grid{
     display:grid; grid-template-columns:1fr 1fr; gap:14px;
   }
+  .mp-savings-grid{
+    grid-template-columns:repeat(3, 1fr); gap:8px;
+  }
+  .mp-savings-grid .mp-account:not(.is-expanded){
+    aspect-ratio:auto; overflow:hidden; border-radius:var(--radius-md);
+    border:1px solid var(--line); border-left:3px solid var(--acc-color, var(--accent));
+    padding:8px 6px; justify-content:center; cursor:pointer; gap:0;
+  }
+  .mp-savings-grid .mp-account:not(.is-expanded) .mp-account-name{ font-size:.72rem; white-space:nowrap; }
+  .mp-savings-grid .mp-account:not(.is-expanded) .mp-balance-label{ font-size:.5rem; margin-top:2px; }
+  .mp-savings-grid .mp-account:not(.is-expanded) .mp-account-total{ font-size:.66rem; margin-top:1px; }
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
     border-left-width:4px; border-left-style:solid; border-left-color:var(--acc-color, var(--accent));
@@ -990,7 +1001,7 @@
         : '<div class="mp-empty">이번 달 사용 내역이 없어요</div>') +
       '</section>';
     } else {
-      html += '<div class="mp-accounts-grid">';
+      html += '<div class="mp-accounts-grid mp-savings-grid">';
       for(var m = 1; m <= 12; m++){
         var mmk = year + "-" + String(m).padStart(2,"0");
         var msm = state.savings[mmk] || { amount:0, interest:0, tx:[] };
