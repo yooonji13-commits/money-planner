@@ -310,6 +310,12 @@
     padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box;
   }
   .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
+  .mp-savings-tx-add{
+    display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:6px; margin-top:10px; align-items:center;
+  }
+  .mp-savings-tx-add > *{ min-width:0; }
+  .mp-savings-tx-add input{ padding:0 6px; font-size:.74rem; height:32px; box-sizing:border-box; width:100%; }
+  .mp-savings-tx-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
 
   .mp-empty{ color:var(--muted); font-size:.82rem; padding:10px 0; text-align:center; }
 
@@ -760,7 +766,12 @@
       var showFixed0 = !!uiFlags.showFixed[expandedAcc.id];
       var total0 = accountTotal(expandedAcc);
 
-      html += '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
+      html +=
+        '<div class="mp-tools-row">' +
+          '<button class="mp-fixed-toggle-btn' + (showFixed0 ? ' active' : '') + '" data-action="toggle-fixed-list" data-id="' + expandedAcc.id + '">' + (showFixed0 ? '고정지출 접기 ▴' : '고정지출 ▾') + '</button>' +
+        '</div>' +
+        (showFixed0 ? renderFixedExpensesHTML(expandedAcc) : '') +
+        '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + esc(expandedAcc.name) + '</div>' +
@@ -808,15 +819,11 @@
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
             '<button class="mp-btn small" type="submit">추가</button>' +
           '</form>' +
-          '<div class="mp-tools-row">' +
-            '<button class="mp-fixed-toggle-btn' + (showFixed0 ? ' active' : '') + '" data-action="toggle-fixed-list" data-id="' + expandedAcc.id + '">' + (showFixed0 ? '고정지출 접기 ▴' : '고정지출 ▾') + '</button>' +
-            (log0.length ?
-            '<div class="mp-sort-toggle">' +
-              '<button class="mp-sort-btn' + (sortDesc0 ? ' active' : '') + '" data-action="set-log-sort" data-order="desc">최신순</button>' +
-              '<button class="mp-sort-btn' + (!sortDesc0 ? ' active' : '') + '" data-action="set-log-sort" data-order="asc">과거순</button>' +
-            '</div>' : '') +
-          '</div>' +
-          (showFixed0 ? renderFixedExpensesHTML(expandedAcc) : '') +
+          (log0.length ?
+          '<div class="mp-sort-toggle">' +
+            '<button class="mp-sort-btn' + (sortDesc0 ? ' active' : '') + '" data-action="set-log-sort" data-order="desc">최신순</button>' +
+            '<button class="mp-sort-btn' + (!sortDesc0 ? ' active' : '') + '" data-action="set-log-sort" data-order="asc">과거순</button>' +
+          '</div>' : '') +
         '</div>' +
       '</div>';
     }
@@ -940,7 +947,7 @@
           '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
-          '<form class="mp-tx-add-personal" data-action="add-savings-tx">' +
+          '<form class="mp-savings-tx-add" data-action="add-savings-tx">' +
             '<input type="date" name="date" value="' + todayISO + '" required>' +
             '<input type="text" name="memo" placeholder="사용 내용">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
