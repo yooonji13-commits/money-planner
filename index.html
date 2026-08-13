@@ -38,6 +38,29 @@
   *{box-sizing:border-box;}
   @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
 
+  /* ---- animation system ---- */
+  @keyframes mp-card-expand{ from{ opacity:0; transform:scale(.97); } to{ opacity:1; transform:scale(1); } }
+  @keyframes mp-reveal{ from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:translateY(0); } }
+  @keyframes mp-tab-fade-in{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
+
+  .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-fixed-toggle-btn, .mp-month-btn,
+  .mp-reset-btn, .mp-account:not(.is-expanded), .mp-color-swatch, .mp-log-toggle{
+    transition: transform .12s ease, background-color .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease, box-shadow .15s ease;
+  }
+  .mp-btn:active, .mp-icon-btn:active, .mp-sort-btn:active, .mp-fixed-toggle-btn:active,
+  .mp-month-btn:active, .mp-reset-btn:active, .mp-account:not(.is-expanded):active, .mp-log-toggle:active{
+    transform: scale(.96);
+  }
+  .mp-tab:active{ transform: scale(.93); }
+  .mp-tab.active::before{ transition: opacity .15s ease, transform .15s ease; }
+
+  .mp-account.is-expanded{ animation: mp-card-expand .22s ease; }
+  .mp-account-settings-panel, .mp-month-picker, .mp-reveal-panel{ animation: mp-reveal .18s ease; }
+  .mp-main.mp-tab-fade{ animation: mp-tab-fade-in .2s ease; }
+
+  .mp-total, .mp-account-total{ transition: color .2s ease; }
+  .mp-progress > div{ transition: width .3s ease, background-color .2s ease; }
+
   body{ background:var(--bg); }
 
   #mp-root{
@@ -722,7 +745,7 @@
   function renderFixedExpensesHTML(acc){
     var list = acc.fixedExpenses || [];
     var editingFx = uiFlags.editingFixed && uiFlags.editingFixed.accountId === acc.id ? uiFlags.editingFixed.id : null;
-    return '<div class="mp-detail-field"><div class="mp-label">고정 지출</div>' +
+    return '<div class="mp-detail-field mp-reveal-panel"><div class="mp-label">고정 지출</div>' +
       (list.length ?
         '<div class="mp-fixed-list">' +
           list.map(function(fx){
@@ -1032,7 +1055,7 @@
     var list = state.savingsExpenses || [];
     var editingFx = uiFlags.editingAnnualExpense;
     var nowMonth = parseInt(state.currentMonth.slice(5,7), 10);
-    return '<div class="mp-detail-field"><div class="mp-label">연례지출내역</div>' +
+    return '<div class="mp-detail-field mp-reveal-panel"><div class="mp-label">연례지출내역</div>' +
       (list.length ?
         '<div class="mp-fixed-list">' +
           list.slice().sort(function(a,b){ return (a.month||0) - (b.month||0); }).map(function(fx){
@@ -1319,10 +1342,14 @@
   // ---------- events ----------
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
+      if(btn.dataset.tab === state.activeTab) return;
       commitPendingUtilityFields();
       commitPendingSavingsFields();
       state.activeTab = btn.dataset.tab;
       saveState(); render();
+      main.classList.remove("mp-tab-fade");
+      void main.offsetWidth;
+      main.classList.add("mp-tab-fade");
     });
   });
 
