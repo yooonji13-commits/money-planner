@@ -93,6 +93,36 @@
     white-space:nowrap;
   }
   .mp-reset-btn:hover{ color:var(--negative); border-color:var(--negative); }
+  #mp-sync-btn.is-paired{ color:var(--positive); border-color:var(--positive); }
+
+  .mp-sync-overlay{
+    position:fixed; inset:0; z-index:20; background:rgba(24,28,34,.4);
+    display:flex; align-items:flex-end; justify-content:center;
+    animation: mp-reveal .18s ease;
+  }
+  .mp-sync-modal{
+    background:var(--surface); width:100%; max-width:480px; border-radius:20px 20px 0 0;
+    padding:20px 20px max(20px, env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:14px;
+    max-height:80vh; overflow-y:auto;
+  }
+  .mp-sync-head{ display:flex; align-items:center; justify-content:space-between; }
+  .mp-sync-title{ font-size:1.05rem; font-weight:800; }
+  .mp-sync-close{ background:none; border:none; color:var(--muted); font-size:1.2rem; cursor:pointer; padding:2px 6px; }
+  .mp-sync-desc{ font-size:.82rem; color:var(--muted); line-height:1.5; }
+  .mp-sync-code-display{
+    font-size:2rem; font-weight:800; letter-spacing:.15em; text-align:center;
+    font-variant-numeric:tabular-nums; padding:16px; background:var(--surface-alt); border-radius:var(--radius-md);
+    color:var(--accent);
+  }
+  .mp-sync-status{ font-size:.76rem; color:var(--muted); text-align:center; }
+  .mp-sync-status.err{ color:var(--negative); }
+  .mp-sync-divider{ display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.74rem; margin:2px 0; }
+  .mp-sync-divider::before, .mp-sync-divider::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .mp-sync-join-form{ display:flex; gap:8px; }
+  .mp-sync-join-form input{
+    flex:1; text-align:center; letter-spacing:.2em; font-variant-numeric:tabular-nums; font-size:1rem;
+  }
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
 
@@ -386,12 +416,14 @@
   <header class="mp-header" id="mp-header">
     <div class="mp-date" id="mp-headerdate"></div>
     <div class="mp-header-actions">
+      <button class="mp-reset-btn" id="mp-sync-btn" data-action="toggle-sync-panel" type="button">동기화</button>
       <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
       <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
       <button class="mp-reset-btn" id="mp-reset-btn" data-action="reset-tab" type="button">초기화</button>
     </div>
     <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
+  <div id="mp-sync-panel"></div>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
     <button class="mp-tab" data-tab="personal">
@@ -417,6 +449,7 @@
   </nav>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -496,6 +529,205 @@
 
   function saveState(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
+    scheduleCloudPush();
+  }
+
+  // ---------- 클라우드 동기화 (Supabase) ----------
+  var SUPABASE_URL = "https://xjagznqrkhktepgoiorm.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_-BdzLRLLU-YsilxbAlgqMQ_Lj-UtwYb";
+  var SYNC_CODE_KEY = "mp_sync_code";
+  var SYNC_UPDATED_KEY = "mp_last_saved_at";
+  var supabaseClient = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
+
+  var syncStatus = { syncing:false, lastSyncedAt:null, error:null };
+  var pushDebounceTimer = null;
+  var lastPushedSnapshot = null;
+  var realtimeChannel = null;
+
+  function getSyncCode(){ return localStorage.getItem(SYNC_CODE_KEY) || ""; }
+  function setSyncCode(code){
+    if(code) localStorage.setItem(SYNC_CODE_KEY, code);
+    else localStorage.removeItem(SYNC_CODE_KEY);
+  }
+  function generateSyncCode(){
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  function scheduleCloudPush(){
+    if(!getSyncCode() || !supabaseClient) return;
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = setTimeout(pushStateToCloud, 800);
+  }
+
+  function pushStateToCloud(){
+    var code = getSyncCode();
+    if(!code || !supabaseClient) return;
+    syncStatus.syncing = true;
+    renderSyncPanel();
+    var snapshot = JSON.stringify(state);
+    var nowIso = new Date().toISOString();
+    supabaseClient.from("sync_data")
+      .upsert({ code: code, data: state, updated_at: nowIso })
+      .then(function(res){
+        syncStatus.syncing = false;
+        if(res.error){
+          syncStatus.error = res.error.message;
+        } else {
+          syncStatus.error = null;
+          syncStatus.lastSyncedAt = new Date();
+          lastPushedSnapshot = snapshot;
+        }
+        renderSyncPanel();
+      });
+  }
+
+  function applyRemoteState(remoteData){
+    var d = defaultState();
+    var merged = Object.assign(d, remoteData, {
+      accounts: remoteData.accounts || d.accounts,
+      logs: remoteData.logs || {},
+      savings: remoteData.savings || {},
+      savingsExpenses: remoteData.savingsExpenses || [],
+      living: remoteData.living || {},
+      loans: remoteData.loans || [],
+      utilities: remoteData.utilities || {}
+    });
+    migrateReflectedFlags(merged);
+    state = merged;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
+    render();
+  }
+
+  function subscribeRealtime(){
+    if(!supabaseClient) return;
+    var code = getSyncCode();
+    if(!code) return;
+    if(realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); realtimeChannel = null; }
+    realtimeChannel = supabaseClient.channel("sync_data_" + code)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sync_data", filter: "code=eq." + code }, function(payload){
+        if(!payload.new || !payload.new.data) return;
+        var incoming = JSON.stringify(payload.new.data);
+        if(incoming === lastPushedSnapshot) return;
+        lastPushedSnapshot = incoming;
+        applyRemoteState(payload.new.data);
+      })
+      .subscribe();
+  }
+
+  function unsubscribeRealtime(){
+    if(supabaseClient && realtimeChannel){ supabaseClient.removeChannel(realtimeChannel); }
+    realtimeChannel = null;
+  }
+
+  function createSyncCode(){
+    if(!supabaseClient){ syncStatus.error = "동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해주세요."; renderSyncPanel(); return; }
+    var code = generateSyncCode();
+    syncStatus.syncing = true;
+    renderSyncPanel();
+    supabaseClient.from("sync_data").upsert({ code: code, data: state, updated_at: new Date().toISOString() })
+      .then(function(res){
+        syncStatus.syncing = false;
+        if(res.error){
+          syncStatus.error = res.error.message;
+          renderSyncPanel();
+          return;
+        }
+        setSyncCode(code);
+        syncStatus.error = null;
+        syncStatus.lastSyncedAt = new Date();
+        lastPushedSnapshot = JSON.stringify(state);
+        subscribeRealtime();
+        renderSyncPanel();
+      });
+  }
+
+  function joinSyncCode(code){
+    if(!supabaseClient){ uiFlags.syncJoinError = "동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해주세요."; renderSyncPanel(); return; }
+    uiFlags.syncJoinError = "";
+    syncStatus.syncing = true;
+    renderSyncPanel();
+    supabaseClient.from("sync_data").select("*").eq("code", code).maybeSingle()
+      .then(function(res){
+        syncStatus.syncing = false;
+        if(res.error || !res.data){
+          uiFlags.syncJoinError = "해당 코드를 찾을 수 없어요. 코드를 다시 확인해주세요.";
+          renderSyncPanel();
+          return;
+        }
+        setSyncCode(code);
+        lastPushedSnapshot = JSON.stringify(res.data.data);
+        applyRemoteState(res.data.data);
+        syncStatus.error = null;
+        syncStatus.lastSyncedAt = new Date();
+        subscribeRealtime();
+        renderSyncPanel();
+      });
+  }
+
+  function unpairSync(){
+    unsubscribeRealtime();
+    setSyncCode("");
+    syncStatus = { syncing:false, lastSyncedAt:null, error:null };
+    renderSyncPanel();
+  }
+
+  function relativeTimeKo(date){
+    if(!date) return "";
+    var sec = Math.max(0, Math.floor((Date.now() - date.getTime())/1000));
+    if(sec < 5) return "방금 전";
+    if(sec < 60) return sec + "초 전";
+    var min = Math.floor(sec/60);
+    if(min < 60) return min + "분 전";
+    var hr = Math.floor(min/60);
+    if(hr < 24) return hr + "시간 전";
+    return Math.floor(hr/24) + "일 전";
+  }
+
+  function renderSyncPanel(){
+    var panel = document.getElementById("mp-sync-panel");
+    var syncBtn = document.getElementById("mp-sync-btn");
+    if(!panel) return;
+    var code = getSyncCode();
+    if(syncBtn) syncBtn.classList.toggle("is-paired", !!code);
+    if(!uiFlags.showSync){ panel.innerHTML = ""; return; }
+
+    var body;
+    if(code){
+      body =
+        '<div class="mp-sync-desc">이 코드를 다른 기기의 "동기화" 메뉴에서 입력하면 데이터가 실시간으로 연결돼요.</div>' +
+        '<div class="mp-sync-code-display">' + code.slice(0,3) + ' ' + code.slice(3) + '</div>' +
+        '<div class="mp-sync-status' + (syncStatus.error ? ' err' : '') + '">' +
+          (syncStatus.syncing ? '동기화 중…' : (syncStatus.error ? '동기화 실패: ' + esc(syncStatus.error) : (syncStatus.lastSyncedAt ? '마지막 동기화: ' + relativeTimeKo(syncStatus.lastSyncedAt) : '아직 동기화 전이에요'))) +
+        '</div>' +
+        '<button type="button" class="mp-btn ghost block" data-action="sync-now">지금 동기화</button>' +
+        '<button type="button" class="mp-btn ghost block" data-action="unpair-sync" style="color:var(--negative);">연결 해제</button>';
+    } else {
+      body =
+        '<div class="mp-sync-desc">코드 없이 로그인 없이, 6자리 코드만으로 다른 기기와 실시간 동기화할 수 있어요. 저장할 때마다 인터넷이 필요해요.</div>' +
+        '<button type="button" class="mp-btn block" data-action="create-sync-code">새 코드 만들기</button>' +
+        '<div class="mp-sync-divider">또는</div>' +
+        '<form class="mp-sync-join-form" data-action="join-sync-code">' +
+          '<input type="text" inputmode="numeric" name="code" placeholder="6자리 코드 입력" maxlength="6" required>' +
+          '<button type="submit" class="mp-btn">연결하기</button>' +
+        '</form>' +
+        (uiFlags.syncJoinError ? '<div class="mp-sync-status err">' + esc(uiFlags.syncJoinError) + '</div>' : '') +
+        (syncStatus.syncing ? '<div class="mp-sync-status">연결하는 중…</div>' : '');
+    }
+
+    panel.innerHTML =
+      '<div class="mp-sync-overlay" data-action="close-sync-panel">' +
+        '<div class="mp-sync-modal" data-action="noop-stop">' +
+          '<div class="mp-sync-head">' +
+            '<div class="mp-sync-title">동기화</div>' +
+            '<button type="button" class="mp-sync-close" data-action="close-sync-panel">✕</button>' +
+          '</div>' +
+          body +
+        '</div>' +
+      '</div>';
   }
 
   function won(n){
@@ -624,7 +856,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"" };
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -1358,6 +1590,32 @@
     if(!el) return;
     var action = el.dataset.action;
 
+    if(action === "toggle-sync-panel"){
+      uiFlags.showSync = !uiFlags.showSync;
+      uiFlags.syncJoinError = "";
+      renderSyncPanel();
+      return;
+    }
+    if(action === "close-sync-panel"){
+      uiFlags.showSync = false;
+      renderSyncPanel();
+      return;
+    }
+    if(action === "noop-stop"){ return; }
+    if(action === "create-sync-code"){
+      createSyncCode();
+      return;
+    }
+    if(action === "sync-now"){
+      pushStateToCloud();
+      return;
+    }
+    if(action === "unpair-sync"){
+      if(!confirm("연결을 해제할까요? 이 기기의 데이터는 그대로 남아있고, 다른 기기와의 실시간 동기화만 멈춰요.")) return;
+      unpairSync();
+      return;
+    }
+
     if(action === "reset-tab"){
       var tabName = TAB_NAMES[state.activeTab] || "현재 탭";
       if(!confirm("정말 " + tabName + " 탭의 데이터를 모두 지우고 초기화할까요? 되돌릴 수 없어요.")) return;
@@ -1810,6 +2068,17 @@
     var action = form.dataset.action;
     var fd = new FormData(form);
 
+    if(action === "join-sync-code"){
+      var joinCode = (fd.get("code") || "").trim();
+      if(!/^[0-9]{6}$/.test(joinCode)){
+        uiFlags.syncJoinError = "6자리 숫자 코드를 입력해주세요.";
+        renderSyncPanel();
+        return;
+      }
+      joinSyncCode(joinCode);
+      return;
+    }
+
     if(action === "goto-month"){
       commitPendingUtilityFields();
       commitPendingSavingsFields();
@@ -2012,6 +2281,7 @@
         });
         migrateReflectedFlags(merged);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
         location.reload();
       };
       reader.onerror = function(){
@@ -2022,7 +2292,34 @@
     });
   }
 
+  function initSync(){
+    var code = getSyncCode();
+    if(!code || !supabaseClient) return;
+    subscribeRealtime();
+    syncStatus.syncing = true;
+    supabaseClient.from("sync_data").select("*").eq("code", code).maybeSingle()
+      .then(function(res){
+        syncStatus.syncing = false;
+        if(res.error || !res.data){
+          renderSyncPanel();
+          return;
+        }
+        var remoteUpdatedAt = new Date(res.data.updated_at).getTime();
+        var localUpdatedAtRaw = localStorage.getItem(SYNC_UPDATED_KEY);
+        var localUpdatedAt = localUpdatedAtRaw ? new Date(localUpdatedAtRaw).getTime() : 0;
+        if(remoteUpdatedAt > localUpdatedAt){
+          lastPushedSnapshot = JSON.stringify(res.data.data);
+          applyRemoteState(res.data.data);
+        } else {
+          pushStateToCloud();
+        }
+        syncStatus.lastSyncedAt = new Date();
+        renderSyncPanel();
+      });
+  }
+
   render();
+  initSync();
 })();
 </script>
 </body>
