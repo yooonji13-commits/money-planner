@@ -945,7 +945,6 @@
   }
 
   var TAB_NAMES = { personal: "개인", living: "생활비", family: "저축", loan: "대출", utility: "관리비" };
-  var resetBtn = document.getElementById("mp-reset-btn");
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
     if(appHeader) document.documentElement.style.setProperty("--mp-header-h", appHeader.offsetHeight + "px");
@@ -964,7 +963,6 @@
     document.querySelectorAll(".mp-tab").forEach(function(btn){
       btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
     });
-    if(resetBtn) resetBtn.textContent = (TAB_NAMES[state.activeTab] || "") + " 초기화";
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderSavings();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
