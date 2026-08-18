@@ -408,6 +408,14 @@
   .mp-add-account-form{ display:flex; flex-wrap:wrap; gap:8px; margin-top:2px; }
   .mp-add-account-form input{ min-width:110px; }
 
+  .mp-personal-top-row{ display:flex; align-items:center; gap:8px; }
+  .mp-personal-top-row > *:first-child{ flex:1; min-width:0; }
+
+  .mp-lock-screen{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:40px 20px; }
+  .mp-lock-icon{ font-size:2.4rem; }
+  .mp-lock-form{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:6px; }
+  .mp-pw-form{ display:flex; flex-direction:column; gap:8px; }
+
   ::-webkit-scrollbar{ width:0; height:0; }
 </style>
 </head>
@@ -424,6 +432,7 @@
     <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
   <div id="mp-sync-panel"></div>
+  <div id="mp-password-panel"></div>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
     <button class="mp-tab" data-tab="personal">
@@ -472,7 +481,8 @@
       savingsExpenses: [],
       living: {},
       loans: [],
-      utilities: {}
+      utilities: {},
+      personalPasswordHash: ""
     };
   }
 
@@ -730,6 +740,56 @@
       '</div>';
   }
 
+  function renderPasswordModal(){
+    var panel = document.getElementById("mp-password-panel");
+    if(!panel) return;
+    if(!uiFlags.showPasswordSetup){ panel.innerHTML = ""; return; }
+    var hasPw = !!state.personalPasswordHash;
+    var mode = uiFlags.passwordModalMode || (hasPw ? "menu" : "set");
+    var body = "";
+    if(mode === "menu"){
+      body =
+        '<div class="mp-sync-desc">개인 탭에 비밀번호가 설정되어 있어요.</div>' +
+        '<button type="button" class="mp-btn ghost block" data-action="password-mode-change">비밀번호 변경</button>' +
+        '<button type="button" class="mp-btn ghost block" data-action="password-mode-remove" style="color:var(--negative);">비밀번호 해제</button>';
+    } else if(mode === "set"){
+      body =
+        '<div class="mp-sync-desc">개인 탭에 들어갈 때 입력할 비밀번호를 설정해요 (4자 이상).</div>' +
+        '<form class="mp-pw-form" data-action="submit-set-password">' +
+          '<input type="password" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
+          '<input type="password" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<button type="submit" class="mp-btn block">설정하기</button>' +
+        '</form>';
+    } else if(mode === "change"){
+      body =
+        '<form class="mp-pw-form" data-action="submit-change-password">' +
+          '<input type="password" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
+          '<input type="password" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
+          '<input type="password" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<button type="submit" class="mp-btn block">변경하기</button>' +
+        '</form>';
+    } else if(mode === "remove"){
+      body =
+        '<div class="mp-sync-desc">비밀번호를 해제하면 개인 탭이 잠금 없이 바로 열려요.</div>' +
+        '<form class="mp-pw-form" data-action="submit-remove-password">' +
+          '<input type="password" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
+          '<button type="submit" class="mp-btn block" style="background:var(--negative);">비밀번호 해제하기</button>' +
+        '</form>';
+    }
+    body += (uiFlags.passwordError ? '<div class="mp-sync-status err">' + esc(uiFlags.passwordError) + '</div>' : '');
+
+    panel.innerHTML =
+      '<div class="mp-sync-overlay" data-action="close-password-panel">' +
+        '<div class="mp-sync-modal" data-action="noop-stop">' +
+          '<div class="mp-sync-head">' +
+            '<div class="mp-sync-title">비밀번호 설정</div>' +
+            '<button type="button" class="mp-sync-close" data-action="close-password-panel">✕</button>' +
+          '</div>' +
+          body +
+        '</div>' +
+      '</div>';
+  }
+
   function won(n){
     n = Math.round(Number(n) || 0);
     var sign = n < 0 ? "-" : "";
@@ -856,7 +916,15 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var personalUnlocked = false;
+
+  function sha256Hex(text){
+    var enc = new TextEncoder().encode(text);
+    return crypto.subtle.digest("SHA-256", enc).then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,"0"); }).join("");
+    });
+  }
 
   function scrollRowIntoView(id){
     var el = document.querySelector('.mp-tx-row[data-id="' + id + '"]');
@@ -1004,12 +1072,28 @@
     '</div>';
   }
 
+  function renderPersonalLockScreen(){
+    return '<section class="mp-card mp-lock-screen">' +
+      '<div class="mp-lock-icon">🔒</div>' +
+      '<div class="mp-label" style="text-align:center;">개인 탭 잠금</div>' +
+      '<form class="mp-lock-form" data-action="unlock-personal">' +
+        '<input type="password" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
+        '<button type="submit" class="mp-btn block">확인</button>' +
+      '</form>' +
+      (uiFlags.passwordError ? '<div class="mp-sync-status err">' + esc(uiFlags.passwordError) + '</div>' : '') +
+    '</section>';
+  }
+
   function renderPersonal(){
+    if(state.personalPasswordHash && !personalUnlocked){
+      return renderPersonalLockScreen();
+    }
     var html = "";
     var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
     var expandedAcc = expandedAccountId ? state.accounts.find(function(a){ return a.id === expandedAccountId; }) : null;
 
     html += '<div class="mp-tab-sticky">' +
+      '<div class="mp-personal-top-row">' +
       (expandedAccountId ?
         '<button class="mp-btn ghost block" data-action="toggle-log" data-id="' + expandedAccountId + '">← 뒤로가기</button>' :
         (uiFlags.showAddAccount ?
@@ -1020,7 +1104,9 @@
             '<button class="mp-btn small" type="submit">추가</button>' +
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
           '</form>' :
-          '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>'));
+          '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>')) +
+      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (state.personalPasswordHash ? '🔒' : '🔓') + '</button>' +
+      '</div>';
 
     if(expandedAcc){
       var log0 = getLog(expandedAcc.id);
@@ -1614,12 +1700,39 @@
       return;
     }
 
+    if(action === "toggle-password-setup"){
+      uiFlags.showPasswordSetup = true;
+      uiFlags.passwordModalMode = null;
+      uiFlags.passwordError = "";
+      renderPasswordModal();
+      return;
+    }
+    if(action === "close-password-panel"){
+      uiFlags.showPasswordSetup = false;
+      renderPasswordModal();
+      return;
+    }
+    if(action === "password-mode-change"){
+      uiFlags.passwordModalMode = "change";
+      uiFlags.passwordError = "";
+      renderPasswordModal();
+      return;
+    }
+    if(action === "password-mode-remove"){
+      uiFlags.passwordModalMode = "remove";
+      uiFlags.passwordError = "";
+      renderPasswordModal();
+      return;
+    }
+
     if(action === "reset-tab"){
       var tabName = TAB_NAMES[state.activeTab] || "현재 탭";
       if(!confirm("정말 " + tabName + " 탭의 데이터를 모두 지우고 초기화할까요? 되돌릴 수 없어요.")) return;
       if(state.activeTab === "personal"){
         state.accounts = [];
         state.logs = {};
+        state.personalPasswordHash = "";
+        personalUnlocked = false;
         uiFlags.expandedAccounts = {};
         uiFlags.editingSettings = {};
         uiFlags.editingFixed = null;
@@ -2074,6 +2187,75 @@
         return;
       }
       joinSyncCode(joinCode);
+      return;
+    }
+
+    if(action === "unlock-personal"){
+      var tryPw = fd.get("password") || "";
+      sha256Hex(tryPw).then(function(hash){
+        if(hash === state.personalPasswordHash){
+          personalUnlocked = true;
+          uiFlags.passwordError = "";
+          render();
+        } else {
+          uiFlags.passwordError = "비밀번호가 올바르지 않아요.";
+          render();
+        }
+      });
+      return;
+    }
+    if(action === "submit-set-password"){
+      var newPw1 = fd.get("pw1") || "";
+      var newPw2 = fd.get("pw2") || "";
+      if(newPw1.length < 4){ uiFlags.passwordError = "비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
+      if(newPw1 !== newPw2){ uiFlags.passwordError = "비밀번호가 서로 달라요."; renderPasswordModal(); return; }
+      sha256Hex(newPw1).then(function(hash){
+        state.personalPasswordHash = hash;
+        personalUnlocked = true;
+        saveState();
+        uiFlags.showPasswordSetup = false;
+        uiFlags.passwordError = "";
+        renderPasswordModal();
+        render();
+      });
+      return;
+    }
+    if(action === "submit-change-password"){
+      var curPw = fd.get("current") || "";
+      var chgPw1 = fd.get("pw1") || "";
+      var chgPw2 = fd.get("pw2") || "";
+      sha256Hex(curPw).then(function(curHash){
+        if(curHash !== state.personalPasswordHash){
+          uiFlags.passwordError = "현재 비밀번호가 올바르지 않아요.";
+          renderPasswordModal();
+          return;
+        }
+        if(chgPw1.length < 4){ uiFlags.passwordError = "새 비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
+        if(chgPw1 !== chgPw2){ uiFlags.passwordError = "새 비밀번호가 서로 달라요."; renderPasswordModal(); return; }
+        sha256Hex(chgPw1).then(function(newHash){
+          state.personalPasswordHash = newHash;
+          saveState();
+          uiFlags.showPasswordSetup = false;
+          uiFlags.passwordError = "";
+          renderPasswordModal();
+        });
+      });
+      return;
+    }
+    if(action === "submit-remove-password"){
+      var curPw2 = fd.get("current") || "";
+      sha256Hex(curPw2).then(function(curHash2){
+        if(curHash2 !== state.personalPasswordHash){
+          uiFlags.passwordError = "비밀번호가 올바르지 않아요.";
+          renderPasswordModal();
+          return;
+        }
+        state.personalPasswordHash = "";
+        saveState();
+        uiFlags.showPasswordSetup = false;
+        uiFlags.passwordError = "";
+        renderPasswordModal();
+      });
       return;
     }
 
