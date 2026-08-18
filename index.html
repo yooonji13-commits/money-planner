@@ -1084,6 +1084,11 @@
     '</section>';
   }
 
+  function focusPersonalLockInput(){
+    var pwInput = document.querySelector('[data-action="unlock-personal"] input');
+    if(pwInput) pwInput.focus();
+  }
+
   function renderPersonal(){
     if(state.personalPasswordHash && !personalUnlocked){
       return renderPersonalLockScreen();
@@ -1667,6 +1672,7 @@
       main.classList.remove("mp-tab-fade");
       void main.offsetWidth;
       main.classList.add("mp-tab-fade");
+      focusPersonalLockInput();
     });
   });
 
@@ -2501,6 +2507,9 @@
 
   render();
   initSync();
+  if(state.activeTab === "personal" && state.personalPasswordHash && !personalUnlocked){
+    focusPersonalLockInput();
+  }
 })();
 </script>
 </body>
