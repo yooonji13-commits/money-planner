@@ -756,23 +756,23 @@
       body =
         '<div class="mp-sync-desc">개인 탭에 들어갈 때 입력할 비밀번호를 설정해요 (4자 이상).</div>' +
         '<form class="mp-pw-form" data-action="submit-set-password">' +
-          '<input type="password" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
-          '<input type="password" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
           '<button type="submit" class="mp-btn block">설정하기</button>' +
         '</form>';
     } else if(mode === "change"){
       body =
         '<form class="mp-pw-form" data-action="submit-change-password">' +
-          '<input type="password" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
-          '<input type="password" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
-          '<input type="password" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
           '<button type="submit" class="mp-btn block">변경하기</button>' +
         '</form>';
     } else if(mode === "remove"){
       body =
         '<div class="mp-sync-desc">비밀번호를 해제하면 개인 탭이 잠금 없이 바로 열려요.</div>' +
         '<form class="mp-pw-form" data-action="submit-remove-password">' +
-          '<input type="password" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
+          '<input type="password" inputmode="numeric" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
           '<button type="submit" class="mp-btn block" style="background:var(--negative);">비밀번호 해제하기</button>' +
         '</form>';
     }
@@ -1077,7 +1077,7 @@
       '<div class="mp-lock-icon">🔒</div>' +
       '<div class="mp-label" style="text-align:center;">개인 탭 잠금</div>' +
       '<form class="mp-lock-form" data-action="unlock-personal">' +
-        '<input type="password" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
+        '<input type="password" inputmode="numeric" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
         '<button type="submit" class="mp-btn block">확인</button>' +
       '</form>' +
       (uiFlags.passwordError ? '<div class="mp-sync-status err">' + esc(uiFlags.passwordError) + '</div>' : '') +
@@ -1659,6 +1659,7 @@
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
       if(btn.dataset.tab === state.activeTab) return;
+      if(state.activeTab === "personal") personalUnlocked = false;
       commitPendingUtilityFields();
       commitPendingSavingsFields();
       state.activeTab = btn.dataset.tab;
