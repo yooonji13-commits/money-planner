@@ -1077,7 +1077,7 @@
       '<div class="mp-lock-icon">🔒</div>' +
       '<div class="mp-label" style="text-align:center;">개인 탭 잠금</div>' +
       '<form class="mp-lock-form" data-action="unlock-personal">' +
-        '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" class="mp-unlock-input" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
         '<button type="submit" class="mp-btn block">확인</button>' +
       '</form>' +
       (uiFlags.passwordError ? '<div class="mp-sync-status err">' + esc(uiFlags.passwordError) + '</div>' : '') +
@@ -2080,6 +2080,19 @@
 
   root.addEventListener("input", function(e){
     var el = e.target;
+    if(el.classList && el.classList.contains("mp-unlock-input")){
+      var tryVal = el.value;
+      if(tryVal.length >= 4){
+        sha256Hex(tryVal).then(function(hash){
+          if(hash === state.personalPasswordHash){
+            personalUnlocked = true;
+            uiFlags.passwordError = "";
+            render();
+          }
+        });
+      }
+      return;
+    }
     if(!el.classList || !el.classList.contains("mp-money")) return;
     var caret = el.selectionStart;
     var oldVal = el.value;
