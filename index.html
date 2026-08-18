@@ -1086,7 +1086,16 @@
 
   function focusPersonalLockInput(){
     var pwInput = document.querySelector('[data-action="unlock-personal"] input');
-    if(pwInput) pwInput.focus();
+    if(!pwInput) return;
+    pwInput.focus();
+    // iOS Safari sometimes ignores focus() on an element that was just inserted via
+    // innerHTML within the same tap handler. Retrying a beat later (still within the
+    // same user gesture window) catches those cases without hurting the ones that
+    // already worked synchronously.
+    requestAnimationFrame(function(){
+      var el = document.querySelector('[data-action="unlock-personal"] input');
+      if(el) el.focus();
+    });
   }
 
   function renderPersonal(){
