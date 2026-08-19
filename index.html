@@ -199,7 +199,7 @@
     font-size:.74rem; color:var(--muted); border:none; background:none;
     padding:2px 0; width:100%; font-variant-numeric:tabular-nums; flex:1; min-width:0;
   }
-  .mp-account-purpose-input{
+  .mp-account-purpose-input, .mp-account-name-input{
     font-size:.82rem; color:var(--ink); border:none; background:none; padding:2px 0; width:100%;
   }
   .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
@@ -1163,6 +1163,9 @@
         '<div class="mp-account-detail">' +
           (editingSettings0 ? (
             '<div class="mp-account-settings-panel">' +
+              '<div class="mp-detail-field"><div class="mp-label">계좌 이름</div>' +
+                '<input type="text" class="mp-account-name-input" data-action="set-account-name" data-id="' + expandedAcc.id + '" value="' + esc(expandedAcc.name) + '" placeholder="계좌 이름" required>' +
+              '</div>' +
               '<div class="mp-detail-field"><div class="mp-label">용도</div>' +
                 '<input type="text" class="mp-account-purpose-input" data-action="set-purpose" data-id="' + expandedAcc.id + '" value="' + esc(expandedAcc.purpose||"") + '" placeholder="용도 입력 (예: 개인 생활비)">' +
               '</div>' +
@@ -2058,7 +2061,7 @@
   root.addEventListener("keydown", function(e){
     if(e.key !== "Enter") return;
     var el = e.target;
-    if(el.classList && (el.classList.contains("mp-account-number") || el.classList.contains("mp-account-purpose-input") || el.classList.contains("mp-balance-edit"))){
+    if(el.classList && (el.classList.contains("mp-account-number") || el.classList.contains("mp-account-purpose-input") || el.classList.contains("mp-account-name-input") || el.classList.contains("mp-balance-edit"))){
       e.preventDefault();
       el.blur();
     }
@@ -2077,6 +2080,14 @@
       var id2 = el.dataset.id;
       var acc2 = state.accounts.find(function(a){ return a.id === id2; });
       if(acc2) acc2.purpose = el.value.trim();
+      saveState(); render();
+      return;
+    }
+    if(el.classList && el.classList.contains("mp-account-name-input")){
+      var id3 = el.dataset.id;
+      var acc3 = state.accounts.find(function(a){ return a.id === id3; });
+      var newName = el.value.trim();
+      if(acc3 && newName) acc3.name = newName;
       saveState(); render();
       return;
     }
