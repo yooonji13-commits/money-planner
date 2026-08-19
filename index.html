@@ -536,6 +536,10 @@
   }
 
   var state = loadState();
+  // 앱을 새로 열 때마다(완전히 종료 후 재실행 포함) 생활비/관리비/저축 탭이 오늘이 포함된
+  // 달로 시작하도록 리셋한다. 이후 세션 중에는 탭을 오가도 이동했던 달이 유지된다
+  // (탭 클릭 핸들러에서는 더 이상 이 값을 건드리지 않기 때문).
+  state.currentMonth = new Date().toISOString().slice(0,7);
 
   function saveState(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -1677,9 +1681,6 @@
       commitPendingUtilityFields();
       commitPendingSavingsFields();
       state.activeTab = btn.dataset.tab;
-      if(state.activeTab === "living" || state.activeTab === "utility"){
-        state.currentMonth = new Date().toISOString().slice(0,7);
-      }
       saveState(); render();
       main.classList.remove("mp-tab-fade");
       void main.offsetWidth;
