@@ -1677,6 +1677,9 @@
       commitPendingUtilityFields();
       commitPendingSavingsFields();
       state.activeTab = btn.dataset.tab;
+      if(state.activeTab === "living" || state.activeTab === "utility"){
+        state.currentMonth = new Date().toISOString().slice(0,7);
+      }
       saveState(); render();
       main.classList.remove("mp-tab-fade");
       void main.offsetWidth;
