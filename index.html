@@ -204,16 +204,18 @@
   }
   .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
   .mp-detail-field{ display:flex; flex-direction:column; gap:2px; }
+  .mp-fixed-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .mp-fixed-list{ display:flex; flex-direction:column; gap:0; margin-top:2px; }
   .mp-fixed-row{
-    display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center;
+    display:grid; grid-template-columns:36px 1fr auto auto auto; gap:8px; align-items:center;
     padding:7px 0; border-top:1px solid var(--line); font-size:.82rem;
   }
+  .mp-fixed-day{ font-size:.78rem; color:var(--muted); font-weight:650; white-space:nowrap; }
   .mp-fixed-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-fixed-amt{ font-variant-numeric:tabular-nums; font-weight:650; white-space:nowrap; }
-  .mp-fixed-add{ display:grid; grid-template-columns:1fr 100px auto; gap:6px; margin-top:8px; }
+  .mp-fixed-add{ display:grid; grid-template-columns:56px 1fr 100px auto; gap:6px; margin-top:8px; }
   .mp-fixed-add input, .mp-fixed-edit input{ width:100%; }
-  .mp-fixed-edit{ display:grid; grid-template-columns:1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
+  .mp-fixed-edit{ display:grid; grid-template-columns:56px 1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
   .mp-fixed-month{ font-size:.78rem; color:var(--muted); font-weight:650; white-space:nowrap; }
   .mp-annual-row{ grid-template-columns:36px 1fr auto auto auto; }
   .mp-annual-add{ display:grid; grid-template-columns:56px 1fr 100px auto; gap:6px; margin-top:8px; }
@@ -920,7 +922,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, showFixedAddForm:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1047,19 +1049,26 @@
   function renderFixedExpensesHTML(acc){
     var list = acc.fixedExpenses || [];
     var editingFx = uiFlags.editingFixed && uiFlags.editingFixed.accountId === acc.id ? uiFlags.editingFixed.id : null;
-    return '<div class="mp-detail-field mp-reveal-panel"><div class="mp-label">고정 지출</div>' +
+    var showAdd = !!uiFlags.showFixedAddForm[acc.id];
+    return '<div class="mp-detail-field mp-reveal-panel">' +
+      '<div class="mp-fixed-head">' +
+        '<div class="mp-label">고정 지출</div>' +
+        '<button type="button" class="mp-icon-btn" data-action="toggle-fixed-add-form" data-account="' + acc.id + '" title="고정 지출 추가">✎</button>' +
+      '</div>' +
       (list.length ?
         '<div class="mp-fixed-list">' +
           list.map(function(fx){
             if(editingFx === fx.id){
               return '<form class="mp-fixed-edit" data-action="save-fixed-expense" data-account="' + acc.id + '" data-id="' + fx.id + '">' +
-                '<input type="text" name="name" value="' + esc(fx.name) + '" placeholder="이름" required>' +
+                '<input type="number" inputmode="numeric" name="day" value="' + (fx.day||"") + '" placeholder="일" min="1" max="31" required>' +
+                '<input type="text" name="name" value="' + esc(fx.name) + '" placeholder="내용" required>' +
                 '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(fx.amount) + '" placeholder="금액" required>' +
                 '<button type="button" class="mp-icon-btn" data-action="cancel-edit-fixed">취소</button>' +
                 '<button type="submit" class="mp-btn small">저장</button>' +
               '</form>';
             }
             return '<div class="mp-fixed-row">' +
+              '<span class="mp-fixed-day">' + (fx.day ? fx.day + '일' : '-') + '</span>' +
               '<span class="mp-fixed-name">' + esc(fx.name) + '</span>' +
               '<span class="mp-fixed-amt">' + won(fx.amount) + '</span>' +
               '<button class="mp-icon-btn" data-action="start-edit-fixed" data-account="' + acc.id + '" data-id="' + fx.id + '">✎</button>' +
@@ -1068,11 +1077,14 @@
           }).join("") +
         '</div>'
       : '') +
-      '<form class="mp-fixed-add" data-action="add-fixed-expense" data-account="' + acc.id + '">' +
-        '<input type="text" name="name" placeholder="이름 (예: 넷플릭스)" required>' +
-        '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
-        '<button type="submit" class="mp-btn small">추가</button>' +
-      '</form>' +
+      (showAdd ?
+        '<form class="mp-fixed-add" data-action="add-fixed-expense" data-account="' + acc.id + '">' +
+          '<input type="number" inputmode="numeric" name="day" placeholder="일 (예: 1)" min="1" max="31" required>' +
+          '<input type="text" name="name" placeholder="내용 (예: 넷플릭스)" required>' +
+          '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+          '<button type="submit" class="mp-btn small">추가</button>' +
+        '</form>'
+      : '') +
     '</div>';
   }
 
@@ -1837,7 +1849,12 @@
     }
     if(action === "toggle-fixed-list"){
       uiFlags.showFixed[el.dataset.id] = !uiFlags.showFixed[el.dataset.id];
-      if(!uiFlags.showFixed[el.dataset.id]) uiFlags.editingFixed = null;
+      if(!uiFlags.showFixed[el.dataset.id]){ uiFlags.editingFixed = null; uiFlags.showFixedAddForm[el.dataset.id] = false; }
+      render();
+      return;
+    }
+    if(action === "toggle-fixed-add-form"){
+      uiFlags.showFixedAddForm[el.dataset.account] = !uiFlags.showFixedAddForm[el.dataset.account];
       render();
       return;
     }
@@ -1978,7 +1995,7 @@
       var willExpand = !uiFlags.expandedAccounts[toggleId];
       if(willExpand) uiFlags.expandedAccounts = {};
       uiFlags.expandedAccounts[toggleId] = willExpand;
-      if(!willExpand){ uiFlags.editingSettings[toggleId] = false; uiFlags.editingFixed = null; uiFlags.showFixed[toggleId] = false; }
+      if(!willExpand){ uiFlags.editingSettings[toggleId] = false; uiFlags.editingFixed = null; uiFlags.showFixed[toggleId] = false; uiFlags.showFixedAddForm[toggleId] = false; }
       saveState(); render(); return;
     }
     if(action === "delete-tx"){
@@ -2329,11 +2346,13 @@
       var fxAccId = form.dataset.account;
       var fxAcc2 = state.accounts.find(function(a){ return a.id === fxAccId; });
       if(!fxAcc2) return;
+      var fxDay = Math.min(31, Math.max(1, parseInt(fd.get("day"), 10) || 0));
       var fxName = (fd.get("name")||"").trim();
       var fxAmount = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(!fxName || fxAmount <= 0) return;
+      if(!fxDay || !fxName || fxAmount <= 0) return;
       if(!Array.isArray(fxAcc2.fixedExpenses)) fxAcc2.fixedExpenses = [];
-      fxAcc2.fixedExpenses.push({ id: uid(), name: fxName, amount: fxAmount });
+      fxAcc2.fixedExpenses.push({ id: uid(), day: fxDay, name: fxName, amount: fxAmount });
+      uiFlags.showFixedAddForm[fxAccId] = false;
       saveState(); render(); return;
     }
 
@@ -2342,9 +2361,11 @@
       var fxAcc3 = state.accounts.find(function(a){ return a.id === fxAccId2; });
       var fx = fxAcc3 && (fxAcc3.fixedExpenses||[]).find(function(f){ return f.id === form.dataset.id; });
       if(!fx) return;
+      var newFxDay = Math.min(31, Math.max(1, parseInt(fd.get("day"), 10) || 0));
       var newFxName = (fd.get("name")||"").trim();
       var newFxAmount = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(!newFxName || newFxAmount <= 0) return;
+      if(!newFxDay || !newFxName || newFxAmount <= 0) return;
+      fx.day = newFxDay;
       fx.name = newFxName;
       fx.amount = newFxAmount;
       uiFlags.editingFixed = null;
