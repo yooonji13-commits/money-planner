@@ -244,6 +244,9 @@
     font-size:1.2rem; font-weight:700; border:none; background:none; padding:2px 0; width:100%;
   }
   .mp-account:not(.is-expanded) .mp-balance-edit{ font-size:.92rem; text-align:center; }
+  .mp-balance-input-row{ display:flex; align-items:baseline; gap:3px; }
+  .mp-balance-input-row .mp-balance-edit{ flex:1; min-width:0; }
+  .mp-balance-suffix{ font-size:1.05rem; font-weight:700; color:var(--ink); flex-shrink:0; }
   .mp-balance-row{ display:flex; align-items:flex-end; gap:10px; width:100%; }
   .mp-balance-field{ display:flex; flex-direction:column; flex:1; min-width:0; }
   .mp-account-total{ font-size:1.1rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; padding:2px 0; }
@@ -1180,7 +1183,10 @@
           '<div class="mp-balance-row">' +
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">기준 잔액</div>' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + expandedAcc.id + '" value="' + formatNumberString(expandedAcc.balance) + '" style="' + (expandedAcc.balance<0?'color:var(--negative);':'') + '">' +
+              '<div class="mp-balance-input-row">' +
+                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + expandedAcc.id + '" value="' + formatNumberString(expandedAcc.balance) + '" style="' + (expandedAcc.balance<0?'color:var(--negative);':'') + '">' +
+                '<span class="mp-balance-suffix">원</span>' +
+              '</div>' +
             '</div>' +
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">총 보유자산</div>' +
@@ -1280,7 +1286,7 @@
             '<div class="mp-balance-row">' +
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">기준 잔액</div>' +
-                '<div class="mp-balance-edit" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' + formatNumberString(acc.balance) + '</div>' +
+                '<div class="mp-balance-edit" style="' + (acc.balance<0?'color:var(--negative);':'') + '">' + formatNumberString(acc.balance) + '원</div>' +
               '</div>' +
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">총 보유자산</div>' +
