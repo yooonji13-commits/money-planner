@@ -949,9 +949,10 @@
   }
 
   function accountTotal(acc){
+    // 총 보유자산은 반영 여부와 무관하게 모든 지출/입금 내역이 항상 더해지고 빠진 값이다.
+    // "반영"은 순수하게 시각적으로 흐리게 표시하는 용도일 뿐, 이 계산에는 영향을 주지 않는다.
     var log = getLog(acc.id);
     var delta = log.reduce(function(s,t){
-      if(!t.reflected) return s;
       return s + (t.type === "income" ? Number(t.amount||0) : -Number(t.amount||0));
     }, 0);
     return Number(acc.balance||0) + delta;
@@ -1266,7 +1267,7 @@
               '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
               '<span class="mp-tx-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
               '<span style="display:flex;gap:2px;">' +
-              (!t.reflected ? '<button class="mp-icon-btn mp-reflect-btn" data-action="reflect-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="총 보유자산에 반영">반영</button>' : '') +
+              (!t.reflected ? '<button class="mp-icon-btn mp-reflect-btn" data-action="reflect-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="반영 표시(흐리게)">반영</button>' : '') +
               '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✎</button>' +
               '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✕</button>' +
               '</span></div>';
