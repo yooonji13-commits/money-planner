@@ -916,6 +916,116 @@
       }
     }
   }
+  function commitPendingPersonalFields(){
+    if(state.activeTab !== "personal") return;
+    var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
+    if(!expandedAccountId) return;
+    var acc = state.accounts.find(function(a){ return a.id === expandedAccountId; });
+    if(!acc) return;
+    var balanceInput = document.querySelector('[data-action="set-balance"][data-id="' + expandedAccountId + '"]');
+    if(balanceInput) acc.balance = parseMoneyValue(balanceInput.value);
+  }
+  function liveUpdateLoanFromDOM(loanId){
+    var loanCard = document.querySelector("#mp-main .mp-account.is-expanded");
+    if(!loanCard) return;
+    var loLive = state.loans.find(function(l){ return l.id === loanId; });
+    if(!loLive) return;
+    var origInput = loanCard.querySelector('[data-action="set-loan-original"]');
+    var instInput = loanCard.querySelector('[data-action="set-loan-installment"]');
+    var liveOriginal = origInput ? parseMoneyValue(origInput.value) : loLive.originalAmount;
+    var liveInstallment = instInput ? Math.max(0, parseInt(instInput.value, 10) || 0) : loLive.currentInstallment;
+    var liveRepaid = liveInstallment * Number(loLive.monthlyPayment||0);
+    var liveRemaining = liveOriginal - liveRepaid;
+    var loanTotalEl = loanCard.querySelector(".mp-balance-row .mp-account-total");
+    if(loanTotalEl){
+      loanTotalEl.textContent = won(liveRemaining);
+      loanTotalEl.classList.toggle("neg", liveRemaining < 0);
+    }
+    var liveTotalInst = Number(loLive.monthlyPayment||0) > 0 ? Math.ceil(liveOriginal / Number(loLive.monthlyPayment)) : 0;
+    var liveRemainInst = liveTotalInst > 0 ? Math.max(0, liveTotalInst - liveInstallment) : 0;
+    var loanStatsEl = loanCard.querySelector(".mp-loan-stats");
+    if(loanStatsEl){
+      loanStatsEl.innerHTML = '변제 금액 <b>' + won(liveRepaid) + '</b>' +
+        (liveTotalInst > 0 ? (' · 총 ' + liveTotalInst + '회 중 잔여 ' + liveRemainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
+    }
+    var loanHeroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(loanHeroTotalEl){
+      var liveGrandTotal = state.loans.reduce(function(s,l){ return s + (l.id === loLive.id ? liveRemaining : loanRemaining(l)); }, 0);
+      loanHeroTotalEl.textContent = won(liveGrandTotal);
+      loanHeroTotalEl.classList.toggle("neg", liveGrandTotal > 0);
+      loanHeroTotalEl.classList.toggle("pos", liveGrandTotal <= 0);
+    }
+  }
+  function commitPendingLoanFields(){
+    if(state.activeTab !== "loan") return;
+    var expandedLoanId = state.loans.reduce(function(found, l){ return found || (uiFlags.expandedLoans[l.id] ? l.id : null); }, null);
+    if(!expandedLoanId) return;
+    var loan = state.loans.find(function(l){ return l.id === expandedLoanId; });
+    if(!loan) return;
+    var originalInput = document.querySelector('[data-action="set-loan-original"][data-id="' + expandedLoanId + '"]');
+    if(originalInput) loan.originalAmount = parseMoneyValue(originalInput.value);
+    var installmentInput = document.querySelector('[data-action="set-loan-installment"][data-id="' + expandedLoanId + '"]');
+    if(installmentInput) loan.currentInstallment = Math.max(0, parseInt(installmentInput.value, 10) || 0);
+  }
+  function updateLoanDisplay(loanId){
+    var loan = state.loans.find(function(l){ return l.id === loanId; });
+    if(!loan) return;
+    var card = document.querySelector("#mp-main .mp-account.is-expanded");
+    if(card){
+      var remaining = loanRemaining(loan);
+      var totalEl = card.querySelector(".mp-balance-row .mp-account-total");
+      if(totalEl){
+        totalEl.textContent = won(remaining);
+        totalEl.classList.toggle("neg", remaining < 0);
+      }
+      var repaid = loanRepaid(loan);
+      var totalInst = loanTotalInstallments(loan);
+      var remainInst = loanRemainingInstallments(loan);
+      var statsEl = card.querySelector(".mp-loan-stats");
+      if(statsEl){
+        statsEl.innerHTML = '변제 금액 <b>' + won(repaid) + '</b>' +
+          (totalInst > 0 ? (' · 총 ' + totalInst + '회 중 잔여 ' + remainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
+      }
+    }
+    var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(heroTotalEl){
+      var grandTotal = state.loans.reduce(function(s,l){ return s + loanRemaining(l); }, 0);
+      heroTotalEl.textContent = won(grandTotal);
+      heroTotalEl.classList.toggle("neg", grandTotal > 0);
+      heroTotalEl.classList.toggle("pos", grandTotal <= 0);
+    }
+  }
+  function commitPendingLivingFields(){
+    if(state.activeTab !== "living") return;
+    var container = document.querySelector("#mp-main .mp-hero");
+    if(!container) return;
+    var lm = getLivingMonth(state.currentMonth);
+    var budgetInput = container.querySelector('[data-action="set-living-budget"]');
+    if(budgetInput) lm.budget = parseMoneyValue(budgetInput.value);
+  }
+  function updateLivingDisplay(){
+    var mk = state.currentMonth;
+    var lm = getLivingMonth(mk);
+    var hero = document.querySelector("#mp-main .mp-hero");
+    if(!hero) return;
+    var spent = lm.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
+    var received = lm.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
+    var remain = Number(lm.budget||0) - spent + received;
+    var totalEl = hero.querySelector(".mp-total");
+    if(totalEl){
+      totalEl.textContent = won(remain);
+      totalEl.classList.toggle("neg", remain < 0);
+      totalEl.classList.toggle("pos", remain >= 0);
+    }
+    var pct = lm.budget > 0 ? Math.min(100,(spent/lm.budget)*100) : (spent>0?100:0);
+    var barClass = spent > lm.budget && lm.budget>0 ? "over" : (pct>=85?"warn":"");
+    var barEl = hero.querySelector(".mp-progress");
+    if(barEl){
+      barEl.className = "mp-progress " + barClass;
+      var fillEl = barEl.querySelector("div");
+      if(fillEl) fillEl.style.width = pct + "%";
+    }
+  }
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
     return state.logs[accountId];
@@ -1344,9 +1454,9 @@
           '</div>' +
           '<div class="mp-loan-meta">' +
             '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"></div>' +
+              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
             '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"></div>' +
+              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
           '</div>' +
           '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
           '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
@@ -1480,7 +1590,10 @@
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">기준 금액</div>' +
-        '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;width:100%;margin-top:4px;border:none;background:transparent;padding:2px 0;">' +
+        '<div class="mp-balance-input-row" style="margin-top:4px;">' +
+          '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;border:none;background:transparent;padding:2px 0;">' +
+          '<span class="mp-balance-suffix" style="font-size:1.3rem;">원</span>' +
+        '</div>' +
         '<div class="mp-label" style="margin-top:14px;">이번 달 생활비</div>' +
         '<div class="mp-total ' + (remain<0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(remain) + '</div>' +
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
@@ -1655,7 +1768,10 @@
           '<div class="mp-balance-row">' +
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">대출 금액</div>' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0">' +
+              '<div class="mp-balance-input-row">' +
+                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0">' +
+                '<span class="mp-balance-suffix">원</span>' +
+              '</div>' +
             '</div>' +
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">잔여 금액</div>' +
@@ -1718,6 +1834,9 @@
       if(state.activeTab === "personal") personalUnlocked = false;
       commitPendingUtilityFields();
       commitPendingSavingsFields();
+      commitPendingLivingFields();
+      commitPendingLoanFields();
+      commitPendingPersonalFields();
       state.activeTab = btn.dataset.tab;
       saveState(); render();
       main.classList.remove("mp-tab-fade");
@@ -2067,8 +2186,8 @@
       render(); return;
     }
 
-    if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
-    if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
+    if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
     if(action === "save-utility"){
       commitPendingUtilityFields();
@@ -2163,6 +2282,10 @@
       el.setSelectionRange(dPos, dPos);
       return;
     }
+    if(el.dataset.action === "set-loan-installment"){
+      liveUpdateLoanFromDOM(el.dataset.id);
+      return;
+    }
     if(!el.classList || !el.classList.contains("mp-money")) return;
     var caret = el.selectionStart;
     var oldVal = el.value;
@@ -2202,6 +2325,34 @@
         }
       }
     }
+
+    if(el.dataset.action === "set-loan-original"){
+      liveUpdateLoanFromDOM(el.dataset.id);
+    }
+    if(el.dataset.action === "set-living-budget"){
+      var livingHero = document.querySelector("#mp-main .mp-hero");
+      if(livingHero){
+        var lmLive = getLivingMonth(state.currentMonth);
+        var liveBudget = Math.abs(parseMoneyValue(el.value));
+        var liveSpent = lmLive.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
+        var liveReceived = lmLive.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
+        var liveRemain = liveBudget - liveSpent + liveReceived;
+        var livingTotalEl = livingHero.querySelector(".mp-total");
+        if(livingTotalEl){
+          livingTotalEl.textContent = won(liveRemain);
+          livingTotalEl.classList.toggle("neg", liveRemain < 0);
+          livingTotalEl.classList.toggle("pos", liveRemain >= 0);
+        }
+        var livePct = liveBudget > 0 ? Math.min(100,(liveSpent/liveBudget)*100) : (liveSpent>0?100:0);
+        var liveBarClass = liveSpent > liveBudget && liveBudget>0 ? "over" : (livePct>=85?"warn":"");
+        var liveBarEl = livingHero.querySelector(".mp-progress");
+        if(liveBarEl){
+          liveBarEl.className = "mp-progress " + liveBarClass;
+          var liveFillEl = liveBarEl.querySelector("div");
+          if(liveFillEl) liveFillEl.style.width = livePct + "%";
+        }
+      }
+    }
   });
 
   root.addEventListener("change", function(e){
@@ -2232,7 +2383,7 @@
     }
     if(action === "set-loan-original"){
       var loanO = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanO){ loanO.originalAmount = parseMoneyValue(el.value); saveState(); render(); }
+      if(loanO){ loanO.originalAmount = parseMoneyValue(el.value); saveState(); updateLoanDisplay(loanO.id); }
       return;
     }
     if(action === "set-loan-startdate"){
@@ -2242,7 +2393,7 @@
     }
     if(action === "set-loan-installment"){
       var loanI = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); render(); }
+      if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); updateLoanDisplay(loanI.id); }
       return;
     }
     if(action === "set-savings-amount"){
@@ -2258,7 +2409,7 @@
     if(action === "set-living-budget"){
       var lm = getLivingMonth(state.currentMonth);
       lm.budget = parseMoneyValue(el.value);
-      saveState(); render(); return;
+      saveState(); updateLivingDisplay(); return;
     }
     if(action === "set-utility-field"){
       var um = getUtilityMonth(state.currentMonth);
@@ -2361,6 +2512,7 @@
     if(action === "goto-month"){
       commitPendingUtilityFields();
       commitPendingSavingsFields();
+      commitPendingLivingFields();
       var gy = fd.get("year");
       var gm = String(fd.get("month")).padStart(2, "0");
       state.currentMonth = gy + "-" + gm;
