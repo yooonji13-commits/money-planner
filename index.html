@@ -925,6 +925,24 @@
     var balanceInput = document.querySelector('[data-action="set-balance"][data-id="' + expandedAccountId + '"]');
     if(balanceInput) acc.balance = parseMoneyValue(balanceInput.value);
   }
+  function updatePersonalBalanceDisplay(accountId){
+    var acc = state.accounts.find(function(a){ return a.id === accountId; });
+    if(!acc) return;
+    var card = document.querySelector("#mp-main .mp-account.is-expanded");
+    if(!card) return;
+    var balanceInput = card.querySelector('[data-action="set-balance"][data-id="' + accountId + '"]');
+    if(balanceInput){
+      balanceInput.value = formatNumberString(acc.balance);
+      balanceInput.style.width = moneyChWidth(acc.balance);
+      balanceInput.style.color = acc.balance < 0 ? "var(--negative)" : "";
+    }
+    var total = accountTotal(acc);
+    var totalEl = card.querySelector(".mp-balance-row .mp-account-total");
+    if(totalEl){
+      totalEl.textContent = won(total);
+      totalEl.classList.toggle("neg", total < 0);
+    }
+  }
   function liveUpdateLoanFromDOM(loanId){
     var loanCard = document.querySelector("#mp-main .mp-account.is-expanded");
     if(!loanCard) return;
@@ -2370,7 +2388,7 @@
 
     if(action === "set-balance"){
       var acc = state.accounts.find(function(a){ return a.id === el.dataset.id; });
-      if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); render(); }
+      if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); updatePersonalBalanceDisplay(acc.id); }
       return;
     }
     if(action === "set-color"){
