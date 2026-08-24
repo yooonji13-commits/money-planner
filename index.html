@@ -765,23 +765,23 @@
       body =
         '<div class="mp-sync-desc">개인 탭에 들어갈 때 입력할 비밀번호를 설정해요 (4자 이상).</div>' +
         '<form class="mp-pw-form" data-action="submit-set-password">' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="newcode1" placeholder="새 비밀번호" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="newcode2" placeholder="새 비밀번호 확인" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
           '<button type="submit" class="mp-btn block">설정하기</button>' +
         '</form>';
     } else if(mode === "change"){
       body =
         '<form class="mp-pw-form" data-action="submit-change-password">' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="pw1" placeholder="새 비밀번호" autocomplete="off" required>' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="pw2" placeholder="새 비밀번호 확인" autocomplete="off" required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="curcode" placeholder="현재 비밀번호" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="newcode1" placeholder="새 비밀번호" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="newcode2" placeholder="새 비밀번호 확인" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
           '<button type="submit" class="mp-btn block">변경하기</button>' +
         '</form>';
     } else if(mode === "remove"){
       body =
         '<div class="mp-sync-desc">비밀번호를 해제하면 개인 탭이 잠금 없이 바로 열려요.</div>' +
         '<form class="mp-pw-form" data-action="submit-remove-password">' +
-          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="current" placeholder="현재 비밀번호" autocomplete="off" required>' +
+          '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" name="curcode" placeholder="현재 비밀번호" autocomplete="off" data-lpignore="true" data-1p-ignore required>' +
           '<button type="submit" class="mp-btn block" style="background:var(--negative);">비밀번호 해제하기</button>' +
         '</form>';
     }
@@ -1108,22 +1108,6 @@
     if(p.length !== 3) return iso;
     return p[0] + "." + p[1] + "." + p[2];
   }
-  function parseDotDateToISO(str){
-    var digits = String(str||"").replace(/[^0-9]/g, "").slice(0,8);
-    if(digits.length < 8) return null;
-    var y = digits.slice(0,4);
-    var mo = Math.min(12, Math.max(1, parseInt(digits.slice(4,6),10) || 1));
-    var da = Math.min(31, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
-    return y + "-" + String(mo).padStart(2,"0") + "-" + String(da).padStart(2,"0");
-  }
-  function formatDateDotsRaw(raw){
-    var digits = String(raw||"").replace(/[^0-9]/g, "").slice(0,8);
-    var parts = [];
-    if(digits.length > 0) parts.push(digits.slice(0,4));
-    if(digits.length > 4) parts.push(digits.slice(4,6));
-    if(digits.length > 6) parts.push(digits.slice(6,8));
-    return parts.join(".");
-  }
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -1244,7 +1228,7 @@
       '<div class="mp-lock-icon">🔒</div>' +
       '<div class="mp-label" style="text-align:center;">개인 탭 잠금</div>' +
       '<form class="mp-lock-form" data-action="unlock-personal">' +
-        '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" class="mp-unlock-input" name="password" placeholder="비밀번호 입력" autocomplete="off" required autofocus>' +
+        '<input type="text" inputmode="numeric" pattern="[0-9]*" autocapitalize="off" autocorrect="off" spellcheck="false" style="-webkit-text-security:disc;" class="mp-unlock-input" name="unlockcode" placeholder="비밀번호 입력" autocomplete="off" data-lpignore="true" data-1p-ignore required autofocus>' +
         '<button type="submit" class="mp-btn block">확인</button>' +
       '</form>' +
       (uiFlags.passwordError ? '<div class="mp-sync-status err">' + esc(uiFlags.passwordError) + '</div>' : '') +
@@ -1351,7 +1335,7 @@
               '<option value="expense">지출</option>' +
               '<option value="income">입금</option>' +
             '</select>' +
-            '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
+            '<input type="date" name="date" value="' + todayISO + '" required>' +
             '<input type="text" name="memo" placeholder="메모">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
             '<button class="mp-btn small" type="submit">추가</button>' +
@@ -1385,7 +1369,7 @@
                   '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
                   '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
                 '</select>' +
-                '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(t.date) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
+                '<input type="date" name="date" value="' + t.date + '" required>' +
                 '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
                 '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
                 '<div class="mp-tx-edit-actions">' +
@@ -1610,13 +1594,19 @@
       '</div>' +
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
-        '<div class="mp-label">기준 금액</div>' +
-        '<div class="mp-balance-input-row" style="margin-top:4px;">' +
-          '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;border:none;background:transparent;padding:2px 0;width:' + moneyChWidth(m.budget) + ';">' +
-          '<span class="mp-balance-suffix" style="font-size:1.3rem;">원</span>' +
+        '<div class="mp-balance-row">' +
+          '<div class="mp-balance-field">' +
+            '<div class="mp-balance-label">기준 금액</div>' +
+            '<div class="mp-balance-input-row">' +
+              '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;border:none;background:transparent;padding:2px 0;width:' + moneyChWidth(m.budget) + ';">' +
+              '<span class="mp-balance-suffix" style="font-size:1.3rem;">원</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="mp-balance-field">' +
+            '<div class="mp-balance-label">이번 달 생활비</div>' +
+            '<div class="mp-total ' + (remain<0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(remain) + '</div>' +
+          '</div>' +
         '</div>' +
-        '<div class="mp-label" style="margin-top:14px;">이번 달 생활비</div>' +
-        '<div class="mp-total ' + (remain<0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(remain) + '</div>' +
         '<div class="mp-progress ' + barClass + '"><div style="width:' + pct + '%"></div></div>' +
         '<button class="mp-btn ghost block mp-carry-btn" data-action="carry-over-next-month">다음달로 이월</button>' +
       '</section>' +
@@ -2288,21 +2278,6 @@
       }
       return;
     }
-    if(el.classList && el.classList.contains("mp-date-input")){
-      var dCaret = el.selectionStart;
-      var dOldVal = el.value;
-      var dDigitsBefore = (dOldVal.slice(0, dCaret).match(/[0-9]/g) || []).length;
-      var dFormatted = formatDateDotsRaw(dOldVal);
-      el.value = dFormatted;
-      var dCount = 0, dPos = dFormatted.length;
-      for(var di=0; di<dFormatted.length; di++){
-        if(/[0-9]/.test(dFormatted[di])) dCount++;
-        if(dCount === dDigitsBefore){ dPos = di+1; break; }
-      }
-      if(dDigitsBefore === 0) dPos = 0;
-      el.setSelectionRange(dPos, dPos);
-      return;
-    }
     if(el.dataset.action === "set-loan-installment"){
       liveUpdateLoanFromDOM(el.dataset.id);
       return;
@@ -2466,7 +2441,7 @@
     }
 
     if(action === "unlock-personal"){
-      var tryPw = fd.get("password") || "";
+      var tryPw = fd.get("unlockcode") || "";
       sha256Hex(tryPw).then(function(hash){
         if(hash === state.personalPasswordHash){
           personalUnlocked = true;
@@ -2480,8 +2455,8 @@
       return;
     }
     if(action === "submit-set-password"){
-      var newPw1 = fd.get("pw1") || "";
-      var newPw2 = fd.get("pw2") || "";
+      var newPw1 = fd.get("newcode1") || "";
+      var newPw2 = fd.get("newcode2") || "";
       if(newPw1.length < 4){ uiFlags.passwordError = "비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
       if(newPw1 !== newPw2){ uiFlags.passwordError = "비밀번호가 서로 달라요."; renderPasswordModal(); return; }
       sha256Hex(newPw1).then(function(hash){
@@ -2496,9 +2471,9 @@
       return;
     }
     if(action === "submit-change-password"){
-      var curPw = fd.get("current") || "";
-      var chgPw1 = fd.get("pw1") || "";
-      var chgPw2 = fd.get("pw2") || "";
+      var curPw = fd.get("curcode") || "";
+      var chgPw1 = fd.get("newcode1") || "";
+      var chgPw2 = fd.get("newcode2") || "";
       sha256Hex(curPw).then(function(curHash){
         if(curHash !== state.personalPasswordHash){
           uiFlags.passwordError = "현재 비밀번호가 올바르지 않아요.";
@@ -2518,7 +2493,7 @@
       return;
     }
     if(action === "submit-remove-password"){
-      var curPw2 = fd.get("current") || "";
+      var curPw2 = fd.get("curcode") || "";
       sha256Hex(curPw2).then(function(curHash2){
         if(curHash2 !== state.personalPasswordHash){
           uiFlags.passwordError = "비밀번호가 올바르지 않아요.";
@@ -2626,7 +2601,7 @@
       var amount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amount <= 0) return;
       var type = fd.get("type");
-      var date = parseDotDateToISO(fd.get("date")) || todayISO;
+      var date = fd.get("date") || todayISO;
       var memo = (fd.get("memo")||"").trim();
       var acc = state.accounts.find(function(a){ return a.id === accId; });
       if(!acc) return;
@@ -2648,7 +2623,7 @@
       var newAmount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(newAmount <= 0) return;
       var newType = fd.get("type");
-      var newDate = parseDotDateToISO(fd.get("date")) || entry3.date;
+      var newDate = fd.get("date") || entry3.date;
       var newMemo = (fd.get("memo")||"").trim();
       entry3.amount = newAmount;
       entry3.type = newType;
