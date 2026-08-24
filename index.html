@@ -245,7 +245,7 @@
   }
   .mp-account:not(.is-expanded) .mp-balance-edit{ font-size:.92rem; text-align:center; }
   .mp-balance-input-row{ display:flex; align-items:center; gap:3px; min-width:0; width:100%; }
-  .mp-balance-input-row .mp-balance-edit{ flex:1; min-width:0; }
+  .mp-balance-input-row .mp-balance-edit, .mp-balance-input-row .mp-loan-input{ flex:0 1 auto; min-width:0; width:auto; }
   .mp-balance-suffix{ font-size:1.05rem; font-weight:700; color:var(--ink); flex-shrink:0; }
   .mp-balance-row{ display:flex; align-items:flex-end; gap:10px; width:100%; }
   .mp-balance-field{ display:flex; flex-direction:column; flex:1; min-width:0; }
@@ -1139,6 +1139,9 @@
     if(digits === "") return negative ? "-" : "";
     return (negative ? "-" : "") + Number(digits).toLocaleString("ko-KR");
   }
+  function moneyChWidth(raw){
+    return Math.max(4, formatNumberString(raw).length) + "ch";
+  }
 
   function parseMoneyValue(raw){
     raw = String(raw == null ? "" : raw);
@@ -1295,7 +1298,7 @@
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">기준 잔액</div>' +
               '<div class="mp-balance-input-row">' +
-                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + expandedAcc.id + '" value="' + formatNumberString(expandedAcc.balance) + '" style="' + (expandedAcc.balance<0?'color:var(--negative);':'') + '">' +
+                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-balance" data-id="' + expandedAcc.id + '" value="' + formatNumberString(expandedAcc.balance) + '" style="width:' + moneyChWidth(expandedAcc.balance) + ';' + (expandedAcc.balance<0?'color:var(--negative);':'') + '">' +
                 '<span class="mp-balance-suffix">원</span>' +
               '</div>' +
             '</div>' +
@@ -1454,9 +1457,9 @@
           '</div>' +
           '<div class="mp-loan-meta">' +
             '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
-              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
+              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.amount||0) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
             '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
-              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
+              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.interest||0) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
           '</div>' +
           '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
           '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
@@ -1591,7 +1594,7 @@
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">기준 금액</div>' +
         '<div class="mp-balance-input-row" style="margin-top:4px;">' +
-          '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;border:none;background:transparent;padding:2px 0;">' +
+          '<input type="text" inputmode="numeric" class="mp-money" data-action="set-living-budget" value="' + formatNumberString(m.budget) + '" placeholder="700,000" style="font-size:1.3rem;font-weight:700;border:none;background:transparent;padding:2px 0;width:' + moneyChWidth(m.budget) + ';">' +
           '<span class="mp-balance-suffix" style="font-size:1.3rem;">원</span>' +
         '</div>' +
         '<div class="mp-label" style="margin-top:14px;">이번 달 생활비</div>' +
@@ -1769,7 +1772,7 @@
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">대출 금액</div>' +
               '<div class="mp-balance-input-row">' +
-                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0">' +
+                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0" style="width:' + moneyChWidth(expandedLoan.originalAmount||0) + ';">' +
                 '<span class="mp-balance-suffix">원</span>' +
               '</div>' +
             '</div>' +
@@ -2300,6 +2303,10 @@
     }
     if(digitsBefore === 0) pos = (negative && formatted.charAt(0)==="-") ? 1 : 0;
     el.setSelectionRange(pos, pos);
+
+    if(el.closest && el.closest(".mp-balance-input-row")){
+      el.style.width = Math.max(4, formatted.length) + "ch";
+    }
 
     if(el.dataset.action === "set-utility-field"){
       var liveTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
