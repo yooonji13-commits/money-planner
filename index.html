@@ -612,7 +612,12 @@
       savingsExpenses: remoteData.savingsExpenses || [],
       living: remoteData.living || {},
       loans: remoteData.loans || [],
-      utilities: remoteData.utilities || {}
+      utilities: remoteData.utilities || {},
+      // 어느 탭/몇 월을 보고 있는지는 기기별 화면 상태일 뿐이라 동기화 대상이 아니다.
+      // 원격 갱신을 받아도 지금 보고 있는 탭/월은 그대로 유지한다 (안 그러면 다른 기기나
+      // 남아있던 탭이 저축 탭에 있을 때 실시간 갱신이 올 때마다 현재 화면이 그쪽으로 튕겨나간다).
+      activeTab: state.activeTab,
+      currentMonth: state.currentMonth
     });
     migrateReflectedFlags(merged);
     state = merged;
