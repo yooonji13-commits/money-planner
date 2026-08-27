@@ -66,6 +66,10 @@
   body.mp-lock-scroll{ height:100vh; height:100dvh; overflow:hidden; }
   body.mp-lock-scroll #mp-root{ height:100vh; height:100dvh; min-height:0; }
   body.mp-lock-scroll .mp-main{ overflow:hidden; }
+  /* .mp-main에 overflow:hidden이 붙으면 그 안의 position:sticky 요소는 뷰포트가 아니라
+     .mp-main 자신을 기준으로 top 오프셋을 다시 적용해서 엉뚱하게 아래로 밀려난다.
+     관리비 탭은 어차피 스크롤이 없어 sticky가 필요 없으니 그냥 꺼서 원래 자리에 둔다. */
+  body.mp-lock-scroll .mp-tab-sticky{ position:static; }
 
   #mp-root{
     font-family:var(--font-ui);
@@ -129,6 +133,7 @@
   }
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
+  .mp-main.mp-util-tight-top{ padding-top:4px; }
 
   .mp-tab-sticky{
     position:sticky; top:var(--mp-header-h, 60px); z-index:4;
@@ -1189,6 +1194,7 @@
   function render(){
     headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
     document.body.classList.toggle("mp-lock-scroll", state.activeTab === "utility");
+    main.classList.toggle("mp-util-tight-top", state.activeTab === "utility");
     document.querySelectorAll(".mp-tab").forEach(function(btn){
       btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
     });
@@ -1781,7 +1787,7 @@
         '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
       '</section>' +
     '</div>' +
-      '<section class="mp-card">' +
+      '<section class="mp-card" style="margin-top:10px;margin-bottom:10px;">' +
         '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
         '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk) + '</div>' +
       '</section>';
