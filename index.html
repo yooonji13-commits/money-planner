@@ -225,7 +225,8 @@
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
   .mp-loan-input{ width:100%; }
-  .mp-util-chart{ width:100%; height:130px; display:block; margin-top:10px; }
+  .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
+  .mp-util-chart{ display:block; height:130px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -1192,6 +1193,7 @@
     else if(state.activeTab === "utility") main.innerHTML = renderUtility();
     else main.innerHTML = renderLiving();
     updateStickyOffset();
+    if(state.activeTab === "utility") centerUtilityChart();
   }
 
   // ---------- 개인 탭 ----------
@@ -1670,16 +1672,42 @@
 
   // ---------- 관리비 탭 ----------
   function utilityChartHTML(currentKey){
-    var months = [];
-    for(var i = 5; i >= 0; i--){ months.push(shiftMonth(currentKey, -i)); }
+    // 실제로 값이 입력된 달(+지금 보고 있는 달)만 기준으로 범위를 잡는다. 그냥 넘겨보기만 한
+    // 빈 달까지 범위에 들어가면 안 되므로 getUtilityMonth()로 자동 생성된 0원짜리 항목은 제외한다.
+    var keysWithData = Object.keys(state.utilities || {}).filter(function(k){
+      return utilityTotal(state.utilities[k]) > 0;
+    });
+    var boundary = keysWithData.concat([currentKey]).sort();
+    var minKey = boundary[0];
+    var maxKey = boundary[boundary.length - 1];
+
+    function buildMonths(){
+      var list = [];
+      var cursor = minKey;
+      var guard = 0;
+      while(guard++ < 1200){
+        list.push(cursor);
+        if(cursor === maxKey) break;
+        cursor = shiftMonth(cursor, 1);
+      }
+      return list;
+    }
+    var months = buildMonths();
+    // 데이터가 몇 달 없을 때도 추세를 볼 수 있도록 최소 6개월 폭은 보여준다.
+    while(months.length < 6){
+      minKey = shiftMonth(minKey, -1);
+      months = buildMonths();
+    }
+
     var totals = months.map(function(mk){
       var m = state.utilities[mk];
       return m ? utilityTotal(m) : 0;
     });
     var max = Math.max.apply(null, totals.concat([1]));
-    var w = 300, h = 120, padTop = 20, padBottom = 22, padX = 22;
+    var stepPx = 54, h = 120, padTop = 20, padBottom = 22, padX = 26;
     var innerH = h - padTop - padBottom;
-    var stepX = (w - padX * 2) / (months.length - 1);
+    var w = Math.max(300, padX * 2 + (months.length - 1) * stepPx);
+    var stepX = months.length > 1 ? (w - padX * 2) / (months.length - 1) : 0;
 
     var points = totals.map(function(v, i){
       var x = padX + i * stepX;
@@ -1693,18 +1721,26 @@
 
     var marks = points.map(function(p){
       var isCurrent = p.mk === currentKey;
-      var mlabel = parseInt(p.mk.slice(5,7), 10) + '월';
+      var mlabel = (p.mk.slice(0,4) !== currentKey.slice(0,4) ? p.mk.slice(2,4) + '.' : '') + parseInt(p.mk.slice(5,7), 10) + '월';
       return (p.v > 0 ?
           '<text x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="7.5" fill="var(--muted)" text-anchor="middle">' + won(p.v).replace("원","") + '</text>'
         : '') +
-        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isCurrent ? 4 : 3) + '" fill="' + (isCurrent ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"/>' +
+        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isCurrent ? 4 : 3) + '" fill="' + (isCurrent ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
         '<text x="' + p.x.toFixed(1) + '" y="' + (h - 6) + '" font-size="8.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
     }).join("");
 
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="mp-util-chart" xmlns="http://www.w3.org/2000/svg">' +
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" class="mp-util-chart" xmlns="http://www.w3.org/2000/svg">' +
       '<path d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
       marks +
     '</svg>';
+  }
+  function centerUtilityChart(){
+    var wrap = document.getElementById("mp-util-chart-wrap");
+    if(!wrap) return;
+    var dot = wrap.querySelector('circle[data-current="1"]');
+    if(!dot) return;
+    var cx = parseFloat(dot.getAttribute("cx")) || 0;
+    wrap.scrollLeft = Math.max(0, cx - wrap.clientWidth / 2);
   }
 
   function renderUtility(){
@@ -1742,7 +1778,7 @@
     '</div>' +
       '<section class="mp-card">' +
         '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
-        utilityChartHTML(mk) +
+        '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk) + '</div>' +
       '</section>';
   }
 
