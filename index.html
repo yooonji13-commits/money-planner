@@ -624,10 +624,15 @@
       currentMonth: state.currentMonth
     });
     migrateReflectedFlags(merged);
+    // 개인 탭 잠금 화면에서 비밀번호를 입력하는 도중에는 다시 그리지 않는다.
+    // render()는 main.innerHTML을 통째로 새로 만들기 때문에, 마침 그 사이에 다른 기기의
+    // 동기화 갱신이 들어오면 입력 중이던 비밀번호 칸이 빈 칸으로 초기화돼 버린다.
+    // 데이터는 그대로 반영해 두고, 화면은 잠금 화면을 벗어난 뒤 자연스럽게 최신 상태로 그려지게 한다.
+    var onPersonalLockScreen = state.activeTab === "personal" && state.personalPasswordHash && !personalUnlocked;
     state = merged;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
-    render();
+    if(!onPersonalLockScreen) render();
   }
 
   function subscribeRealtime(){
