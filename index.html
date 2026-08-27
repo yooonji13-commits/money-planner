@@ -62,6 +62,10 @@
   .mp-progress > div{ transition: width .3s ease, background-color .2s ease; }
 
   body{ background:var(--bg); }
+  /* 관리비 탭은 화면이 위아래로 스크롤/바운스되지 않도록 완전히 고정한다. */
+  body.mp-lock-scroll{ height:100vh; height:100dvh; overflow:hidden; }
+  body.mp-lock-scroll #mp-root{ height:100vh; height:100dvh; min-height:0; }
+  body.mp-lock-scroll .mp-main{ overflow:hidden; }
 
   #mp-root{
     font-family:var(--font-ui);
@@ -1184,6 +1188,7 @@
 
   function render(){
     headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
+    document.body.classList.toggle("mp-lock-scroll", state.activeTab === "utility");
     document.querySelectorAll(".mp-tab").forEach(function(btn){
       btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
     });
