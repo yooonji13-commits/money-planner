@@ -225,8 +225,8 @@
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
   .mp-loan-input{ width:100%; }
-  .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
-  .mp-util-chart{ display:block; height:130px; }
+  .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:8px; -webkit-overflow-scrolling:touch; }
+  .mp-util-chart{ display:block; height:104px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -1704,7 +1704,7 @@
       return m ? utilityTotal(m) : 0;
     });
     var max = Math.max.apply(null, totals.concat([1]));
-    var stepPx = 54, h = 120, padTop = 20, padBottom = 22, padX = 26;
+    var stepPx = 54, h = 96, padTop = 16, padBottom = 20, padX = 26;
     var innerH = h - padTop - padBottom;
     var w = Math.max(300, padX * 2 + (months.length - 1) * stepPx);
     var stepX = months.length > 1 ? (w - padX * 2) / (months.length - 1) : 0;
@@ -1755,28 +1755,28 @@
         '<button class="mp-month-btn" data-action="month-next">›</button>' +
       '</div>' +
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
-      '<section class="mp-card mp-hero">' +
+      '<section class="mp-card mp-hero" style="padding:14px 18px;">' +
         '<div class="mp-detail-field"><div class="mp-label">납부일자</div>' +
           '<input type="date" data-action="set-utility-field" data-field="payDate" value="' + esc(u.payDate||"") + '">' +
         '</div>' +
-        '<div class="mp-loan-meta">' +
+        '<div class="mp-loan-meta" style="grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">' +
           '<div class="mp-detail-field"><div class="mp-label">커뮤니티</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="community" value="' + formatNumberString(u.community||0) + '" placeholder="0"></div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="community" value="' + (u.community ? formatNumberString(u.community) : "") + '" placeholder="0"></div>' +
           '<div class="mp-detail-field"><div class="mp-label">전기료</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="electricity" value="' + formatNumberString(u.electricity||0) + '" placeholder="0"></div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="electricity" value="' + (u.electricity ? formatNumberString(u.electricity) : "") + '" placeholder="0"></div>' +
           '<div class="mp-detail-field"><div class="mp-label">수도비</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="water" value="' + formatNumberString(u.water||0) + '" placeholder="0"></div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="water" value="' + (u.water ? formatNumberString(u.water) : "") + '" placeholder="0"></div>' +
           '<div class="mp-detail-field"><div class="mp-label">난방비</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="heating" value="' + formatNumberString(u.heating||0) + '" placeholder="0"></div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="heating" value="' + (u.heating ? formatNumberString(u.heating) : "") + '" placeholder="0"></div>' +
           '<div class="mp-detail-field"><div class="mp-label">기타</div>' +
-            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="other" value="' + formatNumberString(u.other||0) + '" placeholder="0"></div>' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="other" value="' + (u.other ? formatNumberString(u.other) : "") + '" placeholder="0"></div>' +
         '</div>' +
-        '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
+        '<div class="mp-label" style="margin-top:8px;">최종 관리비</div>' +
         '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
-        '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
+        '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:8px;">저장</button>' +
       '</section>' +
     '</div>' +
-      '<section class="mp-card">' +
+      '<section class="mp-card" style="padding:14px 16px;">' +
         '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
         '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk) + '</div>' +
       '</section>';
