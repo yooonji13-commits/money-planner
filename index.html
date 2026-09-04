@@ -1087,7 +1087,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1613,7 +1613,6 @@
     var pct = m.budget > 0 ? Math.min(100,(spent/m.budget)*100) : (spent>0?100:0);
     var barClass = spent > m.budget && m.budget>0 ? "over" : (pct>=85?"warn":"");
     var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-    var editingId = uiFlags.editingLivingTx;
 
     return '<div class="mp-tab-sticky">' +
       '<div class="mp-month-switch">' +
@@ -1647,7 +1646,7 @@
             '<option value="expense">지출</option>' +
             '<option value="income">입금</option>' +
           '</select>' +
-          '<input type="date" name="date" value="' + todayISO + '" required>' +
+          '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
           '<input type="text" name="memo" placeholder="내용">' +
           '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
           '<button class="mp-btn small" type="submit">추가</button>' +
@@ -1655,28 +1654,11 @@
         '<div class="mp-tx-list">' +
           (txSorted.length ? txSorted.map(function(t){
             var ty = t.type || "expense";
-            if(editingId === t.id){
-              return '<form class="mp-tx-edit" data-action="save-edit-living-tx" data-id="' + t.id + '">' +
-                '<select name="type">' +
-                  '<option value="expense"' + (ty==="expense"?' selected':'') + '>지출</option>' +
-                  '<option value="income"' + (ty==="income"?' selected':'') + '>입금</option>' +
-                '</select>' +
-                '<input type="date" name="date" value="' + t.date + '" required>' +
-                '<input type="text" name="memo" placeholder="내용" value="' + esc(t.memo||"") + '">' +
-                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
-                '<div class="mp-tx-edit-actions">' +
-                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-living-tx">취소</button>' +
-                  '<button type="submit" class="mp-btn small">저장</button>' +
-                '</div>' +
-              '</form>';
-            }
-            return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
-              '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-              '<span class="mp-tx-amt ' + ty + '">' + (ty==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
-              '<span style="display:flex;gap:2px;">' +
-                '<button class="mp-icon-btn" data-action="start-edit-living-tx" data-id="' + t.id + '">✎</button>' +
-                '<button class="mp-icon-btn" data-action="delete-living-tx" data-id="' + t.id + '">✕</button>' +
-              '</span>' +
+            return '<div class="mp-tx-row mp-tx-row-editable" data-id="' + t.id + '">' +
+              '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-living-tx-date" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
+              '<input type="text" class="mp-tx-memo-edit" data-action="edit-living-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="내용">' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit ' + ty + '" data-action="edit-living-tx-amount" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
+              '<button class="mp-icon-btn" data-action="delete-living-tx" data-id="' + t.id + '">✕</button>' +
             '</div>';
           }).join("") : '<div class="mp-empty">이번 달 지출 내역이 없어요</div>') +
         '</div>' +
@@ -1990,7 +1972,6 @@
         uiFlags.showAddAccount = false;
       } else if(state.activeTab === "living"){
         state.living = {};
-        uiFlags.editingLivingTx = null;
         uiFlags.showMonthPicker = false;
       } else if(state.activeTab === "family"){
         state.savings = {};
@@ -2217,17 +2198,7 @@
     if(action === "delete-living-tx"){
       var lm = getLivingMonth(state.currentMonth);
       lm.tx = lm.tx.filter(function(t){ return t.id !== el.dataset.id; });
-      if(uiFlags.editingLivingTx === el.dataset.id) uiFlags.editingLivingTx = null;
       saveState(); render(); return;
-    }
-
-    if(action === "start-edit-living-tx"){
-      uiFlags.editingLivingTx = el.dataset.id;
-      render(); return;
-    }
-    if(action === "cancel-edit-living-tx"){
-      uiFlags.editingLivingTx = null;
-      render(); return;
     }
 
     if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
@@ -2449,6 +2420,32 @@
         var newFxAmt = Math.abs(parseMoneyValue(el.value));
         if(newFxAmt > 0){ fxA.amount = newFxAmt; saveState(); }
         else el.value = formatNumberString(fxA.amount);
+      }
+      return;
+    }
+    if(action === "edit-living-tx-date"){
+      var lmD = getLivingMonth(state.currentMonth);
+      var ltD = lmD.tx.find(function(t){ return t.id === el.dataset.id; });
+      if(ltD){
+        var newLDate = parseDotDateToISO(el.value);
+        if(newLDate){ ltD.date = newLDate; saveState(); }
+        else el.value = fmtDateDots(ltD.date);
+      }
+      return;
+    }
+    if(action === "edit-living-tx-memo"){
+      var lmM = getLivingMonth(state.currentMonth);
+      var ltM = lmM.tx.find(function(t){ return t.id === el.dataset.id; });
+      if(ltM){ ltM.memo = el.value.trim(); saveState(); }
+      return;
+    }
+    if(action === "edit-living-tx-amount"){
+      var lmA = getLivingMonth(state.currentMonth);
+      var ltA = lmA.tx.find(function(t){ return t.id === el.dataset.id; });
+      if(ltA){
+        var newLAmt = Math.abs(parseMoneyValue(el.value));
+        if(newLAmt > 0){ ltA.amount = newLAmt; saveState(); updateLivingDisplay(); }
+        else el.value = formatNumberString(ltA.amount);
       }
       return;
     }
@@ -2711,21 +2708,7 @@
       var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
       var lm = getLivingMonth(state.currentMonth);
-      lm.tx.push({ id: uid(), date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense" });
-      saveState(); render(); return;
-    }
-
-    if(action === "save-edit-living-tx"){
-      var lmE = getLivingMonth(state.currentMonth);
-      var txE = lmE.tx.find(function(t){ return t.id === form.dataset.id; });
-      if(!txE) return;
-      var newAmt = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(newAmt <= 0) return;
-      txE.amount = newAmt;
-      txE.type = fd.get("type") || "expense";
-      txE.date = fd.get("date") || txE.date;
-      txE.memo = (fd.get("memo")||"").trim();
-      uiFlags.editingLivingTx = null;
+      lm.tx.push({ id: uid(), date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense" });
       saveState(); render(); return;
     }
   });
