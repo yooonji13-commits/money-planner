@@ -1089,7 +1089,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1516,30 +1516,16 @@
     if(expanded){
       var sm2 = getSavingsMonth(mk);
       var txSorted = (sm2.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-      var editingId = uiFlags.editingSavingsTx;
-
       html += '<section class="mp-card mp-log-card">' +
         (txSorted.length ?
         '<div class="mp-log">' +
           txSorted.map(function(t){
-            if(editingId === t.id){
-              return '<form class="mp-tx-edit" data-action="save-edit-savings-tx" data-id="' + t.id + '">' +
-                '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(t.date) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
-                '<input type="text" name="memo" placeholder="내용" value="' + esc(t.memo||"") + '">' +
-                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
-                '<div class="mp-tx-edit-actions">' +
-                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-savings-tx">취소</button>' +
-                  '<button type="submit" class="mp-btn small">저장</button>' +
-                '</div>' +
-              '</form>';
-            }
-            return '<div class="mp-tx-row"><span class="mp-tx-date">' + fmtDateShort(t.date) + '</span>' +
-              '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-              '<span class="mp-tx-amt">-' + won(t.amount).replace("-","") + '</span>' +
-              '<span style="display:flex;gap:2px;">' +
-                '<button class="mp-icon-btn" data-action="start-edit-savings-tx" data-id="' + t.id + '">✎</button>' +
-                '<button class="mp-icon-btn" data-action="delete-savings-tx" data-id="' + t.id + '">✕</button>' +
-              '</span></div>';
+            return '<div class="mp-tx-row mp-tx-row-editable" data-id="' + t.id + '">' +
+              '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-savings-tx-date" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
+              '<input type="text" class="mp-tx-memo-edit" data-action="edit-savings-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="내용">' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit expense" data-action="edit-savings-tx-amount" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
+              '<button class="mp-icon-btn" data-action="delete-savings-tx" data-id="' + t.id + '">✕</button>' +
+            '</div>';
           }).join("") +
         '</div>'
         : '<div class="mp-empty">이번 달 사용 내역이 없어요</div>') +
@@ -1993,7 +1979,6 @@
         state.savingsExpenses = [];
         uiFlags.showAnnualExpenses = false;
         uiFlags.editingAnnualExpense = null;
-        uiFlags.editingSavingsTx = null;
         uiFlags.savingsExpanded = false;
       } else if(state.activeTab === "loan"){
         state.loans = [];
@@ -2103,7 +2088,6 @@
       } else {
         uiFlags.savingsExpanded = false;
       }
-      uiFlags.editingSavingsTx = null;
       saveState(); render(); return;
     }
     if(action === "savings-year-prev"){
@@ -2129,18 +2113,9 @@
       if(uiFlags.editingAnnualExpense === el.dataset.id) uiFlags.editingAnnualExpense = null;
       saveState(); render(); return;
     }
-    if(action === "start-edit-savings-tx"){
-      uiFlags.editingSavingsTx = el.dataset.id;
-      render(); return;
-    }
-    if(action === "cancel-edit-savings-tx"){
-      uiFlags.editingSavingsTx = null;
-      render(); return;
-    }
     if(action === "delete-savings-tx"){
       var sm = getSavingsMonth(state.currentMonth);
       sm.tx = (sm.tx||[]).filter(function(t){ return t.id !== el.dataset.id; });
-      if(uiFlags.editingSavingsTx === el.dataset.id) uiFlags.editingSavingsTx = null;
       saveState(); render(); return;
     }
 
@@ -2469,6 +2444,32 @@
       }
       return;
     }
+    if(action === "edit-savings-tx-date"){
+      var svm3 = getSavingsMonth(state.currentMonth);
+      var svD = (svm3.tx||[]).find(function(t){ return t.id === el.dataset.id; });
+      if(svD){
+        var newSvDate = parseDotDateToISO(el.value);
+        if(newSvDate){ svD.date = newSvDate; saveState(); }
+        else el.value = fmtDateDots(svD.date);
+      }
+      return;
+    }
+    if(action === "edit-savings-tx-memo"){
+      var svm4 = getSavingsMonth(state.currentMonth);
+      var svM = (svm4.tx||[]).find(function(t){ return t.id === el.dataset.id; });
+      if(svM){ svM.memo = el.value.trim(); saveState(); }
+      return;
+    }
+    if(action === "edit-savings-tx-amount"){
+      var svm5 = getSavingsMonth(state.currentMonth);
+      var svA = (svm5.tx||[]).find(function(t){ return t.id === el.dataset.id; });
+      if(svA){
+        var newSvAmt2 = Math.abs(parseMoneyValue(el.value));
+        if(newSvAmt2 > 0){ svA.amount = newSvAmt2; saveState(); updateSavingsDisplay(); }
+        else el.value = formatNumberString(svA.amount);
+      }
+      return;
+    }
     if(action === "set-color"){
       var accC = state.accounts.find(function(a){ return a.id === el.dataset.id; });
       if(accC){ accC.color = el.value; saveState(); render(); }
@@ -2711,19 +2712,6 @@
       scrollRowIntoView(svNewId);
       return;
     }
-    if(action === "save-edit-savings-tx"){
-      var svm2 = getSavingsMonth(state.currentMonth);
-      var svEntry = (svm2.tx||[]).find(function(t){ return t.id === form.dataset.id; });
-      if(!svEntry) return;
-      var newSvAmt = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(newSvAmt <= 0) return;
-      svEntry.amount = newSvAmt;
-      svEntry.date = parseDotDateToISO(fd.get("date")) || svEntry.date;
-      svEntry.memo = (fd.get("memo")||"").trim();
-      uiFlags.editingSavingsTx = null;
-      saveState(); render(); return;
-    }
-
     if(action === "add-living-tx"){
       var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
