@@ -227,6 +227,17 @@
   .mp-fixed-edit{ display:grid; grid-template-columns:56px 1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
   .mp-fixed-month{ font-size:.78rem; color:var(--muted); font-weight:650; white-space:nowrap; }
   .mp-annual-row{ grid-template-columns:36px 1fr auto auto auto; }
+  /* 개인 탭 고정지출: 일/내용/금액을 아이콘 없이 바로 탭해서 수정하는 행 */
+  .mp-fixed-row-editable{ grid-template-columns:30px 1fr 78px 22px; }
+  .mp-fixed-row-editable input{
+    border:none; background:none; padding:2px 0; font-size:.8rem; font-family:var(--font-ui);
+    color:var(--ink); height:auto; border-radius:4px; width:100%;
+  }
+  .mp-fixed-row-editable input:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
+  .mp-fixed-day-edit{ color:var(--muted); font-weight:650; text-align:center; }
+  .mp-fixed-name-edit{ overflow:hidden; text-overflow:ellipsis; }
+  .mp-fixed-amt-edit{ font-variant-numeric:tabular-nums; font-weight:650; text-align:right; }
+  .mp-fixed-row-editable .mp-icon-btn{ padding:2px; justify-self:end; }
   .mp-annual-add{ display:grid; grid-template-columns:56px 1fr 100px auto; gap:6px; margin-top:8px; }
   .mp-annual-add input, .mp-annual-edit input, .mp-annual-add select, .mp-annual-edit select{ width:100%; }
   .mp-annual-edit{ display:grid; grid-template-columns:56px 1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
@@ -1076,7 +1087,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1180,7 +1191,13 @@
     return (negative ? "-" : "") + Number(digits).toLocaleString("ko-KR");
   }
   function moneyChWidth(raw){
-    return Math.max(4, formatNumberString(raw).length) + "ch";
+    // "ch" 단위는 숫자 0 하나의 폭을 기준으로 하는데, 콤마(,)는 실제로 그보다 훨씬 좁게
+    // 그려진다. 글자 수를 그대로 ch로 쓰면 콤마 개수만큼 "원" 앞에 여백이 남으므로,
+    // 콤마는 폭을 훨씬 작게 쳐서 숫자 옆에 "원"이 바짝 붙게 한다.
+    var formatted = formatNumberString(raw);
+    var commaCount = (formatted.match(/,/g) || []).length;
+    var width = (formatted.length - commaCount) + commaCount * 0.55;
+    return Math.max(4, width) + "ch";
   }
 
   function parseMoneyValue(raw){
@@ -1224,7 +1241,6 @@
   // ---------- 개인 탭 ----------
   function renderFixedExpensesHTML(acc){
     var list = acc.fixedExpenses || [];
-    var editingFx = uiFlags.editingFixed && uiFlags.editingFixed.accountId === acc.id ? uiFlags.editingFixed.id : null;
     var showAdd = !!uiFlags.showFixedAddForm[acc.id];
     return '<div class="mp-detail-field mp-reveal-panel">' +
       '<div class="mp-fixed-head">' +
@@ -1234,20 +1250,10 @@
       (list.length ?
         '<div class="mp-fixed-list">' +
           list.map(function(fx){
-            if(editingFx === fx.id){
-              return '<form class="mp-fixed-edit" data-action="save-fixed-expense" data-account="' + acc.id + '" data-id="' + fx.id + '">' +
-                '<input type="number" inputmode="numeric" name="day" value="' + (fx.day||"") + '" placeholder="일" min="1" max="31" required>' +
-                '<input type="text" name="name" value="' + esc(fx.name) + '" placeholder="내용" required>' +
-                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(fx.amount) + '" placeholder="금액" required>' +
-                '<button type="button" class="mp-icon-btn" data-action="cancel-edit-fixed">취소</button>' +
-                '<button type="submit" class="mp-btn small">저장</button>' +
-              '</form>';
-            }
-            return '<div class="mp-fixed-row">' +
-              '<span class="mp-fixed-day">' + (fx.day ? fx.day + '일' : '-') + '</span>' +
-              '<span class="mp-fixed-name">' + esc(fx.name) + '</span>' +
-              '<span class="mp-fixed-amt">' + won(fx.amount) + '</span>' +
-              '<button class="mp-icon-btn" data-action="start-edit-fixed" data-account="' + acc.id + '" data-id="' + fx.id + '">✎</button>' +
+            return '<div class="mp-fixed-row mp-fixed-row-editable" data-account="' + acc.id + '" data-id="' + fx.id + '">' +
+              '<input type="text" inputmode="numeric" class="mp-fixed-day-edit" data-action="edit-fixed-day" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + (fx.day||"") + '" placeholder="일">' +
+              '<input type="text" class="mp-fixed-name-edit" data-action="edit-fixed-name" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + esc(fx.name) + '" placeholder="내용">' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-fixed-amt-edit" data-action="edit-fixed-amount" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + formatNumberString(fx.amount) + '">' +
               '<button class="mp-icon-btn" data-action="delete-fixed-expense" data-account="' + acc.id + '" data-id="' + fx.id + '">✕</button>' +
             '</div>';
           }).join("") +
@@ -1980,7 +1986,6 @@
         personalUnlocked = false;
         uiFlags.expandedAccounts = {};
         uiFlags.editingSettings = {};
-        uiFlags.editingFixed = null;
         uiFlags.showFixed = {};
         uiFlags.showAddAccount = false;
       } else if(state.activeTab === "living"){
@@ -2059,7 +2064,7 @@
     }
     if(action === "toggle-fixed-list"){
       uiFlags.showFixed[el.dataset.id] = !uiFlags.showFixed[el.dataset.id];
-      if(!uiFlags.showFixed[el.dataset.id]){ uiFlags.editingFixed = null; uiFlags.showFixedAddForm[el.dataset.id] = false; }
+      if(!uiFlags.showFixed[el.dataset.id]){ uiFlags.showFixedAddForm[el.dataset.id] = false; }
       render();
       return;
     }
@@ -2150,18 +2155,9 @@
       saveState(); render(); return;
     }
 
-    if(action === "start-edit-fixed"){
-      uiFlags.editingFixed = { accountId: el.dataset.account, id: el.dataset.id };
-      render(); return;
-    }
-    if(action === "cancel-edit-fixed"){
-      uiFlags.editingFixed = null;
-      render(); return;
-    }
     if(action === "delete-fixed-expense"){
       var fxAcc = state.accounts.find(function(a){ return a.id === el.dataset.account; });
       if(fxAcc) fxAcc.fixedExpenses = (fxAcc.fixedExpenses||[]).filter(function(f){ return f.id !== el.dataset.id; });
-      if(uiFlags.editingFixed && uiFlags.editingFixed.id === el.dataset.id) uiFlags.editingFixed = null;
       saveState(); render(); return;
     }
 
@@ -2333,7 +2329,7 @@
     el.setSelectionRange(pos, pos);
 
     if(el.closest && el.closest(".mp-balance-input-row")){
-      el.style.width = Math.max(4, formatted.length) + "ch";
+      el.style.width = moneyChWidth(formatted);
     }
 
     if(el.dataset.action === "set-utility-field"){
@@ -2421,6 +2417,38 @@
         var newAmt = Math.abs(parseMoneyValue(el.value));
         if(newAmt > 0){ txA.amount = newAmt; saveState(); updatePersonalBalanceDisplay(el.dataset.account); }
         else el.value = formatNumberString(txA.amount);
+      }
+      return;
+    }
+    if(action === "edit-fixed-day"){
+      var fxAccD = state.accounts.find(function(a){ return a.id === el.dataset.account; });
+      var fxD = fxAccD && (fxAccD.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
+      if(fxD){
+        var digits = el.value.replace(/[^0-9]/g, "");
+        fxD.day = digits ? Math.min(31, Math.max(1, parseInt(digits, 10))) : 0;
+        el.value = fxD.day || "";
+        saveState();
+      }
+      return;
+    }
+    if(action === "edit-fixed-name"){
+      var fxAccN = state.accounts.find(function(a){ return a.id === el.dataset.account; });
+      var fxN = fxAccN && (fxAccN.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
+      if(fxN){
+        var newFxName = el.value.trim();
+        if(newFxName) fxN.name = newFxName;
+        else el.value = fxN.name;
+        saveState();
+      }
+      return;
+    }
+    if(action === "edit-fixed-amount"){
+      var fxAccA = state.accounts.find(function(a){ return a.id === el.dataset.account; });
+      var fxA = fxAccA && (fxAccA.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
+      if(fxA){
+        var newFxAmt = Math.abs(parseMoneyValue(el.value));
+        if(newFxAmt > 0){ fxA.amount = newFxAmt; saveState(); }
+        else el.value = formatNumberString(fxA.amount);
       }
       return;
     }
@@ -2601,22 +2629,6 @@
       if(!Array.isArray(fxAcc2.fixedExpenses)) fxAcc2.fixedExpenses = [];
       fxAcc2.fixedExpenses.push({ id: uid(), day: fxDay, name: fxName, amount: fxAmount });
       uiFlags.showFixedAddForm[fxAccId] = false;
-      saveState(); render(); return;
-    }
-
-    if(action === "save-fixed-expense"){
-      var fxAccId2 = form.dataset.account;
-      var fxAcc3 = state.accounts.find(function(a){ return a.id === fxAccId2; });
-      var fx = fxAcc3 && (fxAcc3.fixedExpenses||[]).find(function(f){ return f.id === form.dataset.id; });
-      if(!fx) return;
-      var newFxDay = Math.min(31, Math.max(1, parseInt(fd.get("day"), 10) || 0));
-      var newFxName = (fd.get("name")||"").trim();
-      var newFxAmount = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(!newFxDay || !newFxName || newFxAmount <= 0) return;
-      fx.day = newFxDay;
-      fx.name = newFxName;
-      fx.amount = newFxAmount;
-      uiFlags.editingFixed = null;
       saveState(); render(); return;
     }
 
