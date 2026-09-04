@@ -245,6 +245,8 @@
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
   .mp-loan-input{ width:100%; }
+  .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
+  .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
   .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
   .mp-util-chart{ display:block; height:130px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
@@ -907,7 +909,7 @@
     if(!container) return;
     var um = getUtilityMonth(state.currentMonth);
     var dateInput = container.querySelector('[data-field="payDate"]');
-    if(dateInput) um.payDate = dateInput.value;
+    if(dateInput) um.payDate = parseDotDateToISO(dateInput.value) || "";
     ["community","electricity","water","heating","other"].forEach(function(f){
       var input = container.querySelector('[data-field="' + f + '"]');
       if(input) um[f] = Math.abs(parseMoneyValue(input.value));
@@ -918,7 +920,7 @@
     var totalEl = document.querySelector("#mp-main .mp-hero .mp-total");
     if(totalEl) totalEl.textContent = won(utilityTotal(getUtilityMonth(mk)));
     var chartEl = document.querySelector("#mp-main .mp-util-chart");
-    if(chartEl) chartEl.outerHTML = utilityChartHTML(mk);
+    if(chartEl) chartEl.outerHTML = utilityChartHTML(mk, uiFlags.utilityChartField);
   }
   function commitPendingSavingsFields(){
     if(state.activeTab !== "family" || !uiFlags.savingsExpanded) return;
@@ -1087,7 +1089,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1209,6 +1211,7 @@
   }
 
   var TAB_NAMES = { personal: "개인", living: "생활비", family: "저축", loan: "대출", utility: "관리비" };
+  var UTILITY_CHART_FIELDS = { total: "전체", community: "커뮤니티", electricity: "전기료", water: "수도비", heating: "난방비", other: "기타" };
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
     if(appHeader) document.documentElement.style.setProperty("--mp-header-h", appHeader.offsetHeight + "px");
@@ -1666,9 +1669,12 @@
   }
 
   // ---------- 관리비 탭 ----------
-  function utilityChartHTML(currentKey){
+  function utilityChartHTML(currentKey, field){
+    field = UTILITY_CHART_FIELDS[field] ? field : "total";
     // 실제로 값이 입력된 달(+지금 보고 있는 달)만 기준으로 범위를 잡는다. 그냥 넘겨보기만 한
     // 빈 달까지 범위에 들어가면 안 되므로 getUtilityMonth()로 자동 생성된 0원짜리 항목은 제외한다.
+    // 항목(커뮤니티/전기료 등)을 선택해도 x축 범위는 전체 관리비 기준으로 그대로 유지해서
+    // 항목을 바꿀 때마다 스크롤 범위가 널뛰지 않게 한다.
     var keysWithData = Object.keys(state.utilities || {}).filter(function(k){
       return utilityTotal(state.utilities[k]) > 0;
     });
@@ -1696,7 +1702,8 @@
 
     var totals = months.map(function(mk){
       var m = state.utilities[mk];
-      return m ? utilityTotal(m) : 0;
+      if(!m) return 0;
+      return field === "total" ? utilityTotal(m) : Number(m[field]||0);
     });
     var max = Math.max.apply(null, totals.concat([1]));
     var stepPx = 54, h = 120, padTop = 20, padBottom = 22, padX = 26;
@@ -1742,6 +1749,7 @@
     var mk = state.currentMonth;
     var u = getUtilityMonth(mk);
     var total = utilityTotal(u);
+    var chartField = UTILITY_CHART_FIELDS[uiFlags.utilityChartField] ? uiFlags.utilityChartField : "total";
 
     return '<div class="mp-tab-sticky">' +
       '<div class="mp-month-switch">' +
@@ -1752,7 +1760,7 @@
       (uiFlags.showMonthPicker ? monthPickerHTML(mk) : "") +
       '<section class="mp-card mp-hero">' +
         '<div class="mp-detail-field"><div class="mp-label">납부일자</div>' +
-          '<input type="date" data-action="set-utility-field" data-field="payDate" value="' + esc(u.payDate||"") + '">' +
+          '<input type="text" inputmode="numeric" class="mp-date-input" data-action="set-utility-field" data-field="payDate" value="' + (u.payDate ? fmtDateDots(u.payDate) : "") + '" placeholder="YYYY.MM.DD" maxlength="10">' +
         '</div>' +
         '<div class="mp-loan-meta">' +
           '<div class="mp-detail-field"><div class="mp-label">커뮤니티</div>' +
@@ -1773,7 +1781,12 @@
     '</div>' +
       '<section class="mp-card" style="margin-top:10px;margin-bottom:10px;">' +
         '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
-        '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk) + '</div>' +
+        '<div class="mp-util-chart-tabs">' +
+          Object.keys(UTILITY_CHART_FIELDS).map(function(f){
+            return '<button type="button" class="mp-sort-btn' + (chartField===f?' active':'') + '" data-action="set-utility-chart-field" data-field="' + f + '">' + UTILITY_CHART_FIELDS[f] + '</button>';
+          }).join("") +
+        '</div>' +
+        '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk, chartField) + '</div>' +
       '</section>';
   }
 
@@ -2213,6 +2226,11 @@
       setTimeout(function(){ el.textContent = savedLabel; el.disabled = false; }, 1200);
       return;
     }
+    if(action === "set-utility-chart-field"){
+      uiFlags.utilityChartField = el.dataset.field;
+      render();
+      return;
+    }
   });
 
   root.addEventListener("keydown", function(e){
@@ -2497,7 +2515,7 @@
     if(action === "set-utility-field"){
       var um = getUtilityMonth(state.currentMonth);
       var ufield = el.dataset.field;
-      if(ufield === "payDate") um.payDate = el.value;
+      if(ufield === "payDate") um.payDate = parseDotDateToISO(el.value) || "";
       else um[ufield] = Math.abs(parseMoneyValue(el.value));
       saveState();
       updateUtilityDisplay();
