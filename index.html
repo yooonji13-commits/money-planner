@@ -374,14 +374,18 @@
   .mp-tx-row .mp-tx-memo{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; text-align:right; }
   .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
-  .mp-tx-row.is-reflected{ opacity:.45; }
-  .mp-tx-row.is-reflected .mp-tx-date{ cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }
-  .mp-reflect-btn{ color:var(--accent); font-weight:700; font-size:.7rem; }
-  @keyframes mp-reflect-pulse{
-    0%{ background:var(--accent-soft); opacity:1; transform:scale(1.02); }
-    100%{ background:transparent; opacity:.45; transform:scale(1); }
+  /* 개인 탭: 날짜/내역/금액을 아이콘 없이 바로 탭해서 수정하는 행 (기준잔액과 같은 방식) */
+  .mp-tx-row-editable{ grid-template-columns:76px 1fr 78px 24px; }
+  .mp-tx-row-editable input{
+    border:none; background:none; padding:2px 0; font-size:.8rem; font-family:var(--font-ui);
+    color:var(--ink); height:auto; border-radius:4px;
   }
-  .mp-tx-row.mp-just-reflected{ animation:mp-reflect-pulse .5s ease; border-radius:var(--radius-sm); }
+  .mp-tx-row-editable input:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
+  .mp-tx-row-editable .mp-tx-date-edit{ color:var(--muted); font-size:.72rem; font-variant-numeric:tabular-nums; }
+  .mp-tx-row-editable .mp-tx-memo-edit{ overflow:hidden; text-overflow:ellipsis; }
+  .mp-tx-row-editable .mp-tx-amount-edit{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); text-align:right; }
+  .mp-tx-row-editable .mp-tx-amount-edit.income{ color:var(--positive); }
+  .mp-tx-row-editable .mp-icon-btn{ padding:2px; justify-self:end; }
   .mp-log-card{ padding:6px 16px; margin-top:4px; }
   .mp-log-card .mp-log{ margin-top:0; }
   .mp-log-card .mp-empty{ padding:16px 0; }
@@ -506,11 +510,6 @@
   }
 
   function migrateReflectedFlags(s){
-    Object.keys(s.logs || {}).forEach(function(accId){
-      (s.logs[accId] || []).forEach(function(t){
-        if(typeof t.reflected !== "boolean") t.reflected = true;
-      });
-    });
     (s.accounts || []).forEach(function(a){
       if(!Array.isArray(a.fixedExpenses)) a.fixedExpenses = [];
     });
@@ -1077,7 +1076,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingTx:null, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, showFixedAddForm:{}, justReflected:null, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, editingLivingTx:null, logSortOrder:"desc", showAddLoan:false, editingFixed:null, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, editingSavingsTx:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"" };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1101,8 +1100,7 @@
   }
 
   function accountTotal(acc){
-    // 총 보유자산은 반영 여부와 무관하게 모든 지출/입금 내역이 항상 더해지고 빠진 값이다.
-    // "반영"은 순수하게 시각적으로 흐리게 표시하는 용도일 뿐, 이 계산에는 영향을 주지 않는다.
+    // 총 보유자산은 기준 잔액에 모든 지출/입금 내역이 더해지고 빠진 값이다.
     var log = getLog(acc.id);
     var delta = log.reduce(function(s,t){
       return s + (t.type === "income" ? Number(t.amount||0) : -Number(t.amount||0));
@@ -1400,35 +1398,17 @@
         var d = sortDesc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
         return d !== 0 ? d : (sortDesc ? b.ts - a.ts : a.ts - b.ts);
       });
-      var editing = uiFlags.editingTx && uiFlags.editingTx.accountId === expandedAcc.id ? uiFlags.editingTx.txId : null;
 
       html += '<div class="mp-card mp-log-card">' +
         (log.length ?
         '<div class="mp-log">' +
           sorted.map(function(t){
-            if(editing === t.id){
-              return '<form class="mp-tx-edit" data-action="save-edit-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">' +
-                '<select name="type">' +
-                  '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
-                  '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
-                '</select>' +
-                '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(t.date) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
-                '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
-                '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
-                '<div class="mp-tx-edit-actions">' +
-                  '<button type="button" class="mp-icon-btn" data-action="cancel-edit-tx">취소</button>' +
-                  '<button type="submit" class="mp-btn small">저장</button>' +
-                '</div>' +
-              '</form>';
-            }
-            return '<div class="mp-tx-row' + (t.reflected ? ' is-reflected' : '') + (uiFlags.justReflected === t.id ? ' mp-just-reflected' : '') + '" data-account="' + expandedAcc.id + '" data-id="' + t.id + '"><span class="mp-tx-date"' + (t.reflected ? ' title="두 번 클릭하면 반영이 취소돼요"' : '') + '>' + fmtDateShort(t.date) + '</span>' +
-              '<span class="mp-tx-memo">' + esc(t.memo||"") + '</span>' +
-              '<span class="mp-tx-amt ' + t.type + '">' + (t.type==="income"?"+":"-") + won(t.amount).replace("-","") + '</span>' +
-              '<span style="display:flex;gap:2px;">' +
-              (!t.reflected ? '<button class="mp-icon-btn mp-reflect-btn" data-action="reflect-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="반영 표시(흐리게)">반영</button>' : '') +
-              '<button class="mp-icon-btn" data-action="start-edit-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✎</button>' +
+            return '<div class="mp-tx-row mp-tx-row-editable" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">' +
+              '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-tx-date" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
+              '<input type="text" class="mp-tx-memo-edit" data-action="edit-tx-memo" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="메모">' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit ' + t.type + '" data-action="edit-tx-amount" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
               '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✕</button>' +
-              '</span></div>';
+            '</div>';
           }).join("") +
         '</div>'
         : '<div class="mp-empty">아직 기록이 없어요</div>') +
@@ -2231,30 +2211,10 @@
     if(action === "delete-tx"){
       var log = getLog(el.dataset.account);
       state.logs[el.dataset.account] = log.filter(function(t){ return t.id !== el.dataset.id; });
-      if(uiFlags.editingTx && uiFlags.editingTx.txId === el.dataset.id) uiFlags.editingTx = null;
       saveState(); render(); return;
-    }
-
-    if(action === "reflect-tx"){
-      var logR = getLog(el.dataset.account);
-      var txR = logR.find(function(t){ return t.id === el.dataset.id; });
-      if(txR) txR.reflected = true;
-      uiFlags.justReflected = el.dataset.id;
-      saveState(); render();
-      setTimeout(function(){ uiFlags.justReflected = null; }, 550);
-      return;
-    }
-
-    if(action === "start-edit-tx"){
-      uiFlags.editingTx = { accountId: el.dataset.account, txId: el.dataset.id };
-      render(); return;
     }
     if(action === "set-log-sort"){
       uiFlags.logSortOrder = el.dataset.order;
-      render(); return;
-    }
-    if(action === "cancel-edit-tx"){
-      uiFlags.editingTx = null;
       render(); return;
     }
 
@@ -2286,23 +2246,6 @@
       setTimeout(function(){ el.textContent = savedLabel; el.disabled = false; }, 1200);
       return;
     }
-  });
-
-  var lastDateTap = { id: null, time: 0 };
-  root.addEventListener("click", function(e){
-    var dateEl = e.target.closest(".mp-tx-row.is-reflected .mp-tx-date");
-    if(!dateEl) return;
-    var row = dateEl.closest(".mp-tx-row");
-    var key = row.dataset.account + ":" + row.dataset.id;
-    var now = Date.now();
-    if(lastDateTap.key === key && (now - lastDateTap.time) < 600){
-      lastDateTap = { key: null, time: 0 };
-      var log = getLog(row.dataset.account);
-      var tx = log.find(function(t){ return t.id === row.dataset.id; });
-      if(tx){ tx.reflected = false; saveState(); render(); }
-      return;
-    }
-    lastDateTap = { key: key, time: now };
   });
 
   root.addEventListener("keydown", function(e){
@@ -2456,6 +2399,29 @@
     if(action === "set-balance"){
       var acc = state.accounts.find(function(a){ return a.id === el.dataset.id; });
       if(acc){ acc.balance = parseMoneyValue(el.value); saveState(); updatePersonalBalanceDisplay(acc.id); }
+      return;
+    }
+    if(action === "edit-tx-date"){
+      var txD = getLog(el.dataset.account).find(function(t){ return t.id === el.dataset.id; });
+      if(txD){
+        var newDate = parseDotDateToISO(el.value);
+        if(newDate){ txD.date = newDate; saveState(); }
+        else el.value = fmtDateDots(txD.date);
+      }
+      return;
+    }
+    if(action === "edit-tx-memo"){
+      var txM = getLog(el.dataset.account).find(function(t){ return t.id === el.dataset.id; });
+      if(txM){ txM.memo = el.value.trim(); saveState(); }
+      return;
+    }
+    if(action === "edit-tx-amount"){
+      var txA = getLog(el.dataset.account).find(function(t){ return t.id === el.dataset.id; });
+      if(txA){
+        var newAmt = Math.abs(parseMoneyValue(el.value));
+        if(newAmt > 0){ txA.amount = newAmt; saveState(); updatePersonalBalanceDisplay(el.dataset.account); }
+        else el.value = formatNumberString(txA.amount);
+      }
       return;
     }
     if(action === "set-color"){
@@ -2698,31 +2664,11 @@
       var acc = state.accounts.find(function(a){ return a.id === accId; });
       if(!acc) return;
       var newId = uid();
-      getLog(accId).push({ id: newId, date: date, memo: memo, amount: amount, type: type, ts: Date.now(), reflected: false });
+      getLog(accId).push({ id: newId, date: date, memo: memo, amount: amount, type: type, ts: Date.now() });
       form.reset();
       saveState(); render();
       scrollRowIntoView(newId);
       return;
-    }
-
-    if(action === "save-edit-tx"){
-      var accId2 = form.dataset.account;
-      var txId = form.dataset.id;
-      var acc2 = state.accounts.find(function(a){ return a.id === accId2; });
-      var log2 = getLog(accId2);
-      var entry3 = log2.find(function(t){ return t.id === txId; });
-      if(!acc2 || !entry3) return;
-      var newAmount = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(newAmount <= 0) return;
-      var newType = fd.get("type");
-      var newDate = parseDotDateToISO(fd.get("date")) || entry3.date;
-      var newMemo = (fd.get("memo")||"").trim();
-      entry3.amount = newAmount;
-      entry3.type = newType;
-      entry3.date = newDate;
-      entry3.memo = newMemo;
-      uiFlags.editingTx = null;
-      saveState(); render(); return;
     }
 
     if(action === "add-savings-tx"){
