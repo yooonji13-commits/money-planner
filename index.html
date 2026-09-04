@@ -867,14 +867,14 @@
   }
 
   function getSavingsMonth(key){
-    if(!state.savings[key]) state.savings[key] = { amount: 0, interest: 0, tx: [] };
+    if(!state.savings[key]) state.savings[key] = { amount: 0, interest: 0, savingCost: 0, eventCost: 0, tx: [] };
     return state.savings[key];
   }
   function savingsTxTotal(sm){
     return (sm.tx || []).reduce(function(s,t){ return s + Number(t.amount||0); }, 0);
   }
   function savingsNet(sm){
-    return Number(sm.amount||0) + Number(sm.interest||0) - savingsTxTotal(sm);
+    return Number(sm.amount||0) + Number(sm.interest||0) + Number(sm.savingCost||0) + Number(sm.eventCost||0) - savingsTxTotal(sm);
   }
   function totalSavingsAllTime(){
     return Object.keys(state.savings).reduce(function(sum, mk){
@@ -931,6 +931,10 @@
     if(amountInput) sm.amount = parseMoneyValue(amountInput.value);
     var interestInput = container.querySelector('[data-action="set-savings-interest"]');
     if(interestInput) sm.interest = parseMoneyValue(interestInput.value);
+    var costInput = container.querySelector('[data-action="set-savings-cost"]');
+    if(costInput) sm.savingCost = parseMoneyValue(costInput.value);
+    var eventInput = container.querySelector('[data-action="set-savings-event"]');
+    if(eventInput) sm.eventCost = parseMoneyValue(eventInput.value);
   }
   function updateSavingsDisplay(){
     var mk = state.currentMonth;
@@ -1497,6 +1501,10 @@
             '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.amount||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
           '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">결산이자</div>' +
             '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.interest||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
+          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">저축비용</div>' +
+            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-cost" value="' + formatNumberString(sm.savingCost||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.savingCost||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
+          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">집안행사비용</div>' +
+            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-event" value="' + formatNumberString(sm.eventCost||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.eventCost||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
           '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
           '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
           '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
@@ -2303,15 +2311,19 @@
       if(liveTotalEl) liveTotalEl.textContent = won(liveUtilityTotalFromDOM());
     }
 
-    if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest"){
+    if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest" || el.dataset.action === "set-savings-cost" || el.dataset.action === "set-savings-event"){
       var savingsCard = document.querySelector("#mp-main .mp-account.is-expanded");
       if(savingsCard){
         var amountInput = savingsCard.querySelector('[data-action="set-savings-amount"]');
         var interestInput = savingsCard.querySelector('[data-action="set-savings-interest"]');
+        var costInputLive = savingsCard.querySelector('[data-action="set-savings-cost"]');
+        var eventInputLive = savingsCard.querySelector('[data-action="set-savings-event"]');
         var liveAmount = Math.abs(parseMoneyValue(amountInput.value));
         var liveInterest = Math.abs(parseMoneyValue(interestInput.value));
+        var liveCost = Math.abs(parseMoneyValue(costInputLive.value));
+        var liveEvent = Math.abs(parseMoneyValue(eventInputLive.value));
         var smLive = getSavingsMonth(state.currentMonth);
-        var liveNet = liveAmount + liveInterest - savingsTxTotal(smLive);
+        var liveNet = liveAmount + liveInterest + liveCost + liveEvent - savingsTxTotal(smLive);
         var liveTotalAll = totalSavingsAllTime() - savingsNet(smLive) + liveNet;
         var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
         if(heroTotalEl) heroTotalEl.textContent = won(liveTotalAll);
@@ -2512,6 +2524,16 @@
     if(action === "set-savings-interest"){
       var smI = getSavingsMonth(state.currentMonth);
       smI.interest = parseMoneyValue(el.value);
+      saveState(); updateSavingsDisplay(); return;
+    }
+    if(action === "set-savings-cost"){
+      var smC = getSavingsMonth(state.currentMonth);
+      smC.savingCost = parseMoneyValue(el.value);
+      saveState(); updateSavingsDisplay(); return;
+    }
+    if(action === "set-savings-event"){
+      var smE = getSavingsMonth(state.currentMonth);
+      smE.eventCost = parseMoneyValue(el.value);
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-living-budget"){
