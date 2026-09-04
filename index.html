@@ -1132,6 +1132,22 @@
     if(p.length !== 3) return iso;
     return p[0] + "." + p[1] + "." + p[2];
   }
+  function parseDotDateToISO(str){
+    var digits = String(str||"").replace(/[^0-9]/g, "").slice(0,8);
+    if(digits.length < 8) return null;
+    var y = digits.slice(0,4);
+    var mo = Math.min(12, Math.max(1, parseInt(digits.slice(4,6),10) || 1));
+    var da = Math.min(31, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
+    return y + "-" + String(mo).padStart(2,"0") + "-" + String(da).padStart(2,"0");
+  }
+  function formatDateDotsRaw(raw){
+    var digits = String(raw||"").replace(/[^0-9]/g, "").slice(0,8);
+    var parts = [];
+    if(digits.length > 0) parts.push(digits.slice(0,4));
+    if(digits.length > 4) parts.push(digits.slice(4,6));
+    if(digits.length > 6) parts.push(digits.slice(6,8));
+    return parts.join(".");
+  }
 
   function monthPickerHTML(mk){
     var curY = parseInt(mk.slice(0,4),10);
@@ -1362,7 +1378,7 @@
               '<option value="expense">지출</option>' +
               '<option value="income">입금</option>' +
             '</select>' +
-            '<input type="date" name="date" value="' + todayISO + '" required>' +
+            '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
             '<input type="text" name="memo" placeholder="메모">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
             '<button class="mp-btn small" type="submit">추가</button>' +
@@ -1396,7 +1412,7 @@
                   '<option value="expense"' + (t.type==='expense'?' selected':'') + '>지출</option>' +
                   '<option value="income"' + (t.type==='income'?' selected':'') + '>입금</option>' +
                 '</select>' +
-                '<input type="date" name="date" value="' + t.date + '" required>' +
+                '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(t.date) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
                 '<input type="text" name="memo" placeholder="메모" value="' + esc(t.memo||"") + '">' +
                 '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
                 '<div class="mp-tx-edit-actions">' +
@@ -2339,6 +2355,21 @@
       }
       return;
     }
+    if(el.classList && el.classList.contains("mp-date-input")){
+      var dCaret = el.selectionStart;
+      var dOldVal = el.value;
+      var dDigitsBefore = (dOldVal.slice(0, dCaret).match(/[0-9]/g) || []).length;
+      var dFormatted = formatDateDotsRaw(dOldVal);
+      el.value = dFormatted;
+      var dCount = 0, dPos = dFormatted.length;
+      for(var di=0; di<dFormatted.length; di++){
+        if(/[0-9]/.test(dFormatted[di])) dCount++;
+        if(dCount === dDigitsBefore){ dPos = di+1; break; }
+      }
+      if(dDigitsBefore === 0) dPos = 0;
+      el.setSelectionRange(dPos, dPos);
+      return;
+    }
     if(el.dataset.action === "set-loan-installment"){
       liveUpdateLoanFromDOM(el.dataset.id);
       return;
@@ -2662,7 +2693,7 @@
       var amount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amount <= 0) return;
       var type = fd.get("type");
-      var date = fd.get("date") || todayISO;
+      var date = parseDotDateToISO(fd.get("date")) || todayISO;
       var memo = (fd.get("memo")||"").trim();
       var acc = state.accounts.find(function(a){ return a.id === accId; });
       if(!acc) return;
@@ -2684,7 +2715,7 @@
       var newAmount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(newAmount <= 0) return;
       var newType = fd.get("type");
-      var newDate = fd.get("date") || entry3.date;
+      var newDate = parseDotDateToISO(fd.get("date")) || entry3.date;
       var newMemo = (fd.get("memo")||"").trim();
       entry3.amount = newAmount;
       entry3.type = newType;
