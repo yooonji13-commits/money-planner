@@ -1848,7 +1848,7 @@
           (editingSettings0 ? (
             '<div class="mp-account-settings-panel">' +
               '<div class="mp-detail-field"><div class="mp-label">대출기간 시작일</div>' +
-                '<input type="date" data-action="set-loan-startdate" data-id="' + expandedLoan.id + '" value="' + esc(expandedLoan.startDate||"") + '">' +
+                '<input type="text" inputmode="numeric" class="mp-date-input" data-action="set-loan-startdate" data-id="' + expandedLoan.id + '" value="' + (expandedLoan.startDate ? fmtDateDots(expandedLoan.startDate) : "") + '" placeholder="YYYY.MM.DD" maxlength="10">' +
               '</div>' +
               '<div class="mp-loan-meta">' +
                 '<div class="mp-detail-field"><div class="mp-label">금리(%)</div>' +
@@ -2492,7 +2492,11 @@
     }
     if(action === "set-loan-startdate"){
       var loanT = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanT){ loanT.startDate = el.value; saveState(); render(); }
+      if(loanT){
+        var newStart = parseDotDateToISO(el.value);
+        loanT.startDate = newStart || "";
+        saveState(); render();
+      }
       return;
     }
     if(action === "set-loan-installment"){
