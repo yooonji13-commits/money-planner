@@ -1192,13 +1192,17 @@
     if(digits === "") return negative ? "-" : "";
     return (negative ? "-" : "") + Number(digits).toLocaleString("ko-KR");
   }
-  function moneyChWidth(raw){
+  function moneyChWidth(raw, padded){
     // "ch" 단위는 숫자 0 하나의 폭을 기준으로 하는데, 콤마(,)는 실제로 그보다 훨씬 좁게
     // 그려진다. 글자 수를 그대로 ch로 쓰면 콤마 개수만큼 "원" 앞에 여백이 남으므로,
     // 콤마는 폭을 훨씬 작게 쳐서 숫자 옆에 "원"이 바짝 붙게 한다.
+    // padded=true는 .mp-balance-edit처럼 테두리를 없앤 입력칸이 아니라, 기본 input
+    // 패딩(좌우 10px씩)이 그대로 적용되는 필드(예: 저축금액/결산이자)용 - 그 여백만큼
+    // ch를 더 얹지 않으면 숫자가 입력칸 안에서 잘려 보인다.
     var formatted = formatNumberString(raw);
     var commaCount = (formatted.match(/,/g) || []).length;
     var width = (formatted.length - commaCount) + commaCount * 0.55;
+    if(padded) width += 3;
     return Math.max(4, width) + "ch";
   }
 
@@ -1489,19 +1493,17 @@
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + monthNum + '월</div>' +
           '</div>' +
-          '<div class="mp-loan-meta">' +
-            '<div class="mp-detail-field"><div class="mp-label">저축금액</div>' +
-              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.amount||0) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
-            '<div class="mp-detail-field"><div class="mp-label">결산이자</div>' +
-              '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.interest||0) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
-          '</div>' +
+          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">저축금액</div>' +
+            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.amount||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
+          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">결산이자</div>' +
+            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.interest||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
           '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
           '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
           '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           '<form class="mp-savings-tx-add" data-action="add-savings-tx">' +
-            '<input type="date" name="date" value="' + todayISO + '" required>' +
+            '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
             '<input type="text" name="memo" placeholder="사용 내용">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
             '<button class="mp-btn small" type="submit">추가</button>' +
@@ -1522,7 +1524,7 @@
           txSorted.map(function(t){
             if(editingId === t.id){
               return '<form class="mp-tx-edit" data-action="save-edit-savings-tx" data-id="' + t.id + '">' +
-                '<input type="date" name="date" value="' + t.date + '" required>' +
+                '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(t.date) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
                 '<input type="text" name="memo" placeholder="내용" value="' + esc(t.memo||"") + '">' +
                 '<input type="text" inputmode="numeric" class="mp-money" name="amount" value="' + formatNumberString(t.amount) + '" required>' +
                 '<div class="mp-tx-edit-actions">' +
@@ -2318,7 +2320,7 @@
     el.setSelectionRange(pos, pos);
 
     if(el.closest && el.closest(".mp-balance-input-row")){
-      el.style.width = moneyChWidth(formatted);
+      el.style.width = moneyChWidth(formatted, el.classList.contains("mp-loan-input"));
     }
 
     if(el.dataset.action === "set-utility-field"){
@@ -2703,7 +2705,7 @@
       if(svAmt <= 0) return;
       var svm = getSavingsMonth(state.currentMonth);
       var svNewId = uid();
-      svm.tx.push({ id: svNewId, date: fd.get("date") || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, ts: Date.now() });
+      svm.tx.push({ id: svNewId, date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, ts: Date.now() });
       form.reset();
       saveState(); render();
       scrollRowIntoView(svNewId);
@@ -2716,7 +2718,7 @@
       var newSvAmt = Math.abs(parseMoneyValue(fd.get("amount")));
       if(newSvAmt <= 0) return;
       svEntry.amount = newSvAmt;
-      svEntry.date = fd.get("date") || svEntry.date;
+      svEntry.date = parseDotDateToISO(fd.get("date")) || svEntry.date;
       svEntry.memo = (fd.get("memo")||"").trim();
       uiFlags.editingSavingsTx = null;
       saveState(); render(); return;
