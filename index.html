@@ -247,6 +247,17 @@
   .mp-loan-input{ width:100%; }
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
+  /* 관리비 탭은 화면 스크롤이 잠겨 있어서, 작성 내역 목록이 길어져도 카드 밖으로
+     밀려나지 않도록 카드 안에서만 세로 스크롤되게 높이를 제한한다. */
+  .mp-util-log-list{ max-height:180px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .mp-util-log-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:9px 2px; border-top:1px solid var(--line); font-size:.82rem; cursor:pointer;
+  }
+  .mp-util-log-row:first-child{ border-top:none; }
+  .mp-util-log-row.active{ color:var(--accent); font-weight:700; }
+  .mp-util-log-month{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mp-util-log-amt{ font-variant-numeric:tabular-nums; font-weight:650; white-space:nowrap; }
   .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
   .mp-util-chart{ display:block; height:130px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
@@ -1111,7 +1122,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityLog:false };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1758,6 +1769,22 @@
     var cx = parseFloat(dot.getAttribute("cx")) || 0;
     wrap.scrollLeft = Math.max(0, cx - wrap.clientWidth / 2);
   }
+  function utilityLogListHTML(currentKey){
+    var keys = Object.keys(state.utilities || {}).filter(function(k){
+      return utilityTotal(state.utilities[k]) > 0;
+    }).sort().reverse();
+    if(!keys.length) return '<div class="mp-empty">작성된 관리비 내역이 없어요</div>';
+    return '<div class="mp-log mp-util-log-list">' +
+      keys.map(function(k){
+        var m = state.utilities[k];
+        var t = utilityTotal(m);
+        return '<div class="mp-util-log-row' + (k === currentKey ? ' active' : '') + '" data-action="goto-utility-month" data-id="' + k + '">' +
+          '<span class="mp-util-log-month">' + monthLabel(k) + (m.payDate ? ' · ' + fmtDateDots(m.payDate) : '') + '</span>' +
+          '<span class="mp-util-log-amt">' + won(t) + '</span>' +
+        '</div>';
+      }).join("") +
+    '</div>';
+  }
 
   function renderUtility(){
     var mk = state.currentMonth;
@@ -1794,13 +1821,18 @@
       '</section>' +
     '</div>' +
       '<section class="mp-card" style="margin-top:10px;margin-bottom:10px;">' +
-        '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
-        '<div class="mp-util-chart-tabs">' +
-          Object.keys(UTILITY_CHART_FIELDS).map(function(f){
-            return '<button type="button" class="mp-sort-btn' + (chartField===f?' active':'') + '" data-action="set-utility-chart-field" data-field="' + f + '">' + UTILITY_CHART_FIELDS[f] + '</button>';
-          }).join("") +
+        '<div class="mp-fixed-head">' +
+          '<div class="mp-label" style="margin-bottom:2px;">' + (uiFlags.showUtilityLog ? '작성 내역' : '월별 관리비 변화') + '</div>' +
+          '<button type="button" class="mp-icon-btn" data-action="toggle-utility-log" title="작성 내역 보기">' + (uiFlags.showUtilityLog ? '📈' : '✎') + '</button>' +
         '</div>' +
-        '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk, chartField) + '</div>' +
+        (uiFlags.showUtilityLog ?
+          utilityLogListHTML(mk) :
+          '<div class="mp-util-chart-tabs">' +
+            Object.keys(UTILITY_CHART_FIELDS).map(function(f){
+              return '<button type="button" class="mp-sort-btn' + (chartField===f?' active':'') + '" data-action="set-utility-chart-field" data-field="' + f + '">' + UTILITY_CHART_FIELDS[f] + '</button>';
+            }).join("") +
+          '</div>' +
+          '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk, chartField) + '</div>') +
       '</section>';
   }
 
@@ -2233,6 +2265,17 @@
       uiFlags.utilityChartField = el.dataset.field;
       render();
       return;
+    }
+    if(action === "toggle-utility-log"){
+      uiFlags.showUtilityLog = !uiFlags.showUtilityLog;
+      render();
+      return;
+    }
+    if(action === "goto-utility-month"){
+      commitPendingUtilityFields();
+      state.currentMonth = el.dataset.id;
+      uiFlags.showUtilityLog = false;
+      saveState(); render(); return;
     }
   });
 
