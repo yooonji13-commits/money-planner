@@ -626,6 +626,13 @@
           lastPushedSnapshot = snapshot;
         }
         renderSyncPanel();
+      })
+      .catch(function(err){
+        // 네트워크 차단/오프라인 등으로 요청 자체가 실패하면 .then()이 아예 호출되지
+        // 않아서 "동기화 중…" 상태로 영원히 멈춰 보인다. 반드시 여기서 풀어준다.
+        syncStatus.syncing = false;
+        syncStatus.error = "네트워크 연결을 확인해주세요.";
+        renderSyncPanel();
       });
   }
 
@@ -697,6 +704,11 @@
         lastPushedSnapshot = JSON.stringify(state);
         subscribeRealtime();
         renderSyncPanel();
+      })
+      .catch(function(err){
+        syncStatus.syncing = false;
+        syncStatus.error = "네트워크 연결을 확인해주세요.";
+        renderSyncPanel();
       });
   }
 
@@ -719,6 +731,11 @@
         syncStatus.error = null;
         syncStatus.lastSyncedAt = new Date();
         subscribeRealtime();
+        renderSyncPanel();
+      })
+      .catch(function(err){
+        syncStatus.syncing = false;
+        uiFlags.syncJoinError = "네트워크 연결을 확인해주세요.";
         renderSyncPanel();
       });
   }
@@ -770,6 +787,7 @@
           '<button type="submit" class="mp-btn">연결하기</button>' +
         '</form>' +
         (uiFlags.syncJoinError ? '<div class="mp-sync-status err">' + esc(uiFlags.syncJoinError) + '</div>' : '') +
+        (syncStatus.error && !uiFlags.syncJoinError ? '<div class="mp-sync-status err">' + esc(syncStatus.error) + '</div>' : '') +
         (syncStatus.syncing ? '<div class="mp-sync-status">연결하는 중…</div>' : '');
     }
 
@@ -2816,6 +2834,10 @@
           pushStateToCloud();
         }
         syncStatus.lastSyncedAt = new Date();
+        renderSyncPanel();
+      })
+      .catch(function(err){
+        syncStatus.syncing = false;
         renderSyncPanel();
       });
   }
