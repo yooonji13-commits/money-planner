@@ -1663,7 +1663,7 @@
   }
 
   // ---------- 관리비 탭 ----------
-  function utilityChartHTML(currentKey, field){
+  function utilityChartData(currentKey, field){
     field = UTILITY_CHART_FIELDS[field] ? field : "total";
     // 실제로 값이 입력된 달(+지금 보고 있는 달)만 기준으로 범위를 잡는다. 그냥 넘겨보기만 한
     // 빈 달까지 범위에 들어가면 안 되므로 getUtilityMonth()로 자동 생성된 0원짜리 항목은 제외한다.
@@ -1711,6 +1711,12 @@
       return { x: x, y: y, v: v, mk: months[i] };
     });
 
+    return { points: points, w: w, h: h };
+  }
+  function utilityChartHTML(currentKey, field){
+    var data = utilityChartData(currentKey, field);
+    var points = data.points, w = data.w, h = data.h;
+
     var pathD = points.map(function(p, i){
       return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
     }).join(' ');
@@ -1718,17 +1724,39 @@
     var marks = points.map(function(p){
       var isCurrent = p.mk === currentKey;
       var mlabel = (p.mk.slice(0,4) !== currentKey.slice(0,4) ? p.mk.slice(2,4) + '.' : '') + parseInt(p.mk.slice(5,7), 10) + '월';
-      return (p.v > 0 ?
-          '<text x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="7.5" fill="var(--muted)" text-anchor="middle">' + won(p.v).replace("원","") + '</text>'
-        : '') +
-        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isCurrent ? 4 : 3) + '" fill="' + (isCurrent ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
+      return '<text class="mp-util-pt-val" data-mk="' + p.mk + '" x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="7.5" fill="var(--muted)" text-anchor="middle" opacity="' + (p.v > 0 ? 1 : 0) + '">' + won(p.v).replace("원","") + '</text>' +
+        '<circle class="mp-util-pt-dot" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isCurrent ? 4 : 3) + '" fill="' + (isCurrent ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
         '<text x="' + p.x.toFixed(1) + '" y="' + (h - 6) + '" font-size="8.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
     }).join("");
 
     return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" class="mp-util-chart" xmlns="http://www.w3.org/2000/svg">' +
-      '<path d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<path class="mp-util-path" d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
       marks +
     '</svg>';
+  }
+  // 입력칸에 타이핑하는 동안 호출된다. svg를 통째로 교체하면(outerHTML) 실기기 사파리에서
+  // 포커스가 빠지는 경우가 있어, 기존 svg 노드는 그대로 두고 좌표/텍스트만 갱신한다.
+  function liveUtilityChartPatch(){
+    var svg = document.querySelector("#mp-main .mp-util-chart");
+    if(!svg) return;
+    var data = utilityChartData(state.currentMonth, uiFlags.utilityChartField);
+    var points = data.points;
+    var pathEl = svg.querySelector(".mp-util-path");
+    if(pathEl){
+      pathEl.setAttribute("d", points.map(function(p, i){
+        return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
+      }).join(' '));
+    }
+    points.forEach(function(p){
+      var dot = svg.querySelector('.mp-util-pt-dot[data-mk="' + p.mk + '"]');
+      if(dot) dot.setAttribute("cy", p.y.toFixed(1));
+      var val = svg.querySelector('.mp-util-pt-val[data-mk="' + p.mk + '"]');
+      if(val){
+        val.setAttribute("y", (p.y - 8).toFixed(1));
+        val.setAttribute("opacity", p.v > 0 ? 1 : 0);
+        val.textContent = won(p.v).replace("원","");
+      }
+    });
   }
   function centerUtilityChart(){
     var wrap = document.getElementById("mp-util-chart-wrap");
@@ -2319,7 +2347,9 @@
     if(el.dataset.action === "set-utility-field" && el.dataset.field !== "payDate"){
       var umLive = getUtilityMonth(state.currentMonth);
       umLive[el.dataset.field] = Math.abs(parseMoneyValue(el.value));
-      updateUtilityDisplay();
+      var totalElLive = document.querySelector("#mp-main .mp-hero .mp-total");
+      if(totalElLive) totalElLive.textContent = won(utilityTotal(umLive));
+      liveUtilityChartPatch();
     }
 
     if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest" || el.dataset.action === "set-savings-cost" || el.dataset.action === "set-savings-event"){
