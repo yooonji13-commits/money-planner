@@ -902,17 +902,6 @@
   function utilityTotal(u){
     return Number(u.community||0) + Number(u.electricity||0) + Number(u.water||0) + Number(u.heating||0) + Number(u.other||0);
   }
-  function liveUtilityTotalFromDOM(){
-    var container = document.querySelector("#mp-main .mp-hero");
-    if(!container) return 0;
-    var fields = ["community","electricity","water","heating","other"];
-    var sum = 0;
-    fields.forEach(function(f){
-      var input = container.querySelector('[data-field="' + f + '"]');
-      if(input) sum += Math.abs(parseMoneyValue(input.value));
-    });
-    return sum;
-  }
   function commitPendingUtilityFields(){
     if(state.activeTab !== "utility") return;
     var container = document.querySelector("#mp-main .mp-hero");
@@ -2327,9 +2316,10 @@
       el.style.width = moneyChWidth(formatted, el.classList.contains("mp-loan-input"));
     }
 
-    if(el.dataset.action === "set-utility-field"){
-      var liveTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
-      if(liveTotalEl) liveTotalEl.textContent = won(liveUtilityTotalFromDOM());
+    if(el.dataset.action === "set-utility-field" && el.dataset.field !== "payDate"){
+      var umLive = getUtilityMonth(state.currentMonth);
+      umLive[el.dataset.field] = Math.abs(parseMoneyValue(el.value));
+      updateUtilityDisplay();
     }
 
     if(el.dataset.action === "set-savings-amount" || el.dataset.action === "set-savings-interest" || el.dataset.action === "set-savings-cost" || el.dataset.action === "set-savings-event"){
