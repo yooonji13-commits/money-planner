@@ -235,6 +235,13 @@
   .mp-savings-grid .mp-account:not(.is-expanded) .mp-account-name{ font-size:.72rem; white-space:nowrap; }
   .mp-savings-grid .mp-account:not(.is-expanded) .mp-balance-label{ font-size:.5rem; margin-top:2px; }
   .mp-savings-grid .mp-account:not(.is-expanded) .mp-account-total{ font-size:.66rem; margin-top:1px; }
+  .mp-month-icon{
+    width:24px; height:24px; border-radius:50%; margin:0 auto 4px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--accent-soft); color:var(--accent);
+  }
+  .mp-month-icon svg{ width:13px; height:13px; }
+  .mp-month-icon.empty{ background:var(--surface-alt); color:var(--muted); }
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
     border-left-width:4px; border-left-style:solid; border-left-color:var(--acc-color, var(--accent));
@@ -1812,10 +1819,14 @@
       html += '<div class="mp-accounts-grid mp-savings-grid">';
       for(var m = 1; m <= 12; m++){
         var mmk = year + "-" + String(m).padStart(2,"0");
+        var hasData = !!state.savings[mmk];
         var msm = state.savings[mmk] || { amount:0, interest:0, tx:[] };
         var mnet = savingsNet(msm);
         html += '<div class="mp-account" data-action="toggle-savings-month" data-id="' + mmk + '">' +
           '<div class="mp-account-body">' +
+            '<div class="mp-month-icon' + (hasData ? '' : ' empty') + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>' +
+            '</div>' +
             '<div class="mp-account-name">' + m + '월</div>' +
             '<div class="mp-balance-label">순저축</div>' +
             '<div class="mp-account-total' + (mnet<0?' neg':'') + '">' + won(mnet) + '</div>' +
