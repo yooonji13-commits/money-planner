@@ -125,16 +125,34 @@
     flex:1; text-align:center; letter-spacing:.2em; font-variant-numeric:tabular-nums; font-size:1rem;
   }
 
+  .mp-calc-overlay{ position:absolute; inset:0; z-index:20; }
+  .mp-calc-popover{
+    position:absolute; top:calc(var(--mp-header-h, 60px) + 6px); right:16px; width:216px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md);
+    padding:10px; display:flex; flex-direction:column; gap:8px;
+    box-shadow:0 10px 30px rgba(0,0,0,.18);
+    animation: mp-reveal .18s ease;
+  }
+  .mp-calc-head{ display:flex; align-items:center; justify-content:space-between; }
+  .mp-calc-title{ font-size:.78rem; font-weight:800; color:var(--muted); }
+  .mp-calc-close{ background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; padding:0 4px; line-height:1; }
+  .mp-calc-history{ display:flex; flex-direction:column; gap:2px; max-height:74px; overflow-y:auto; }
+  .mp-calc-history:empty{ display:none; }
+  .mp-calc-history-item{
+    display:flex; justify-content:space-between; gap:6px; font-size:.64rem; color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-calc-history-item span:last-child{ color:var(--ink); font-weight:650; }
   .mp-calc-display{
-    font-size:2.1rem; font-weight:700; text-align:right; padding:18px 16px;
+    font-size:1.35rem; font-weight:700; text-align:right; padding:10px 10px;
     background:var(--surface-alt); border-radius:var(--radius-md); color:var(--ink);
     font-variant-numeric:tabular-nums; overflow-x:auto; white-space:nowrap;
   }
-  .mp-calc-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .mp-calc-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; }
   .mp-calc-key{
-    font-family:var(--font-ui); border:none; border-radius:var(--radius-md);
-    background:var(--surface-alt); color:var(--ink); font-size:1.2rem; font-weight:650;
-    padding:16px 0; cursor:pointer;
+    font-family:var(--font-ui); border:none; border-radius:8px;
+    background:var(--surface-alt); color:var(--ink); font-size:.86rem; font-weight:650;
+    padding:9px 0; cursor:pointer;
   }
   .mp-calc-key.op{ background:var(--surface-alt); color:var(--accent); }
   .mp-calc-key.fn{ color:var(--muted); }
@@ -820,6 +838,7 @@
 
   // ---------- 계산기 ----------
   var calcState = { display: "0", stored: null, operator: null, waitingForOperand: false };
+  var calcHistory = [];
   function calcFormatDisplay(raw){
     if(raw === "오류") return raw;
     var negative = raw.charAt(0) === "-";
@@ -871,8 +890,17 @@
   function calcEquals(){
     if(calcState.display === "오류" || calcState.operator == null || calcState.stored == null) return;
     var inputValue = parseFloat(calcState.display);
-    var result = calcCompute(calcState.stored, inputValue, calcState.operator);
-    calcState.display = calcResultString(result);
+    var op = calcState.operator;
+    var result = calcCompute(calcState.stored, inputValue, op);
+    var resultStr = calcResultString(result);
+    if(resultStr !== "오류"){
+      calcHistory.unshift({
+        expr: calcFormatDisplay(String(calcState.stored)) + ' ' + op + ' ' + calcFormatDisplay(String(inputValue)),
+        result: calcFormatDisplay(resultStr)
+      });
+      calcHistory = calcHistory.slice(0, 5);
+    }
+    calcState.display = resultStr;
     calcState.stored = null;
     calcState.operator = null;
     calcState.waitingForOperand = true;
@@ -887,6 +915,23 @@
   function calcPercent(){
     if(calcState.display === "오류") return;
     calcState.display = calcResultString(parseFloat(calcState.display) / 100);
+  }
+  function calcHistoryHTML(){
+    if(!calcHistory.length) return "";
+    return calcHistory.map(function(h){
+      return '<div class="mp-calc-history-item"><span>' + esc(h.expr) + '</span><span>' + esc(h.result) + '</span></div>';
+    }).join("");
+  }
+  // 버튼을 누를 때마다 팝업 전체(오버레이 포함)를 다시 그리면 mp-reveal 등장 애니메이션이
+  // 매번 재생돼 화면이 깜빡였다. 이제 열고 닫을 때만 전체를 그리고, 숫자/연산 입력에는
+  // 화면 값(디스플레이·이력)만 갈아끼운다.
+  function updateCalcView(){
+    var panel = document.getElementById("mp-calculator-panel");
+    if(!panel || !uiFlags.showCalculator) return;
+    var displayEl = panel.querySelector(".mp-calc-display");
+    if(displayEl) displayEl.textContent = calcFormatDisplay(calcState.display);
+    var historyEl = panel.querySelector(".mp-calc-history");
+    if(historyEl) historyEl.innerHTML = calcHistoryHTML();
   }
   function renderCalculatorPanel(){
     var panel = document.getElementById("mp-calculator-panel");
@@ -920,12 +965,13 @@
         '>' + k.label + '</button>';
     }).join("");
     panel.innerHTML =
-      '<div class="mp-sync-overlay" data-action="close-calculator">' +
-        '<div class="mp-sync-modal" data-action="noop-stop">' +
-          '<div class="mp-sync-head">' +
-            '<div class="mp-sync-title">계산기</div>' +
-            '<button type="button" class="mp-sync-close" data-action="close-calculator">✕</button>' +
+      '<div class="mp-calc-overlay" data-action="close-calculator">' +
+        '<div class="mp-calc-popover" data-action="noop-stop">' +
+          '<div class="mp-calc-head">' +
+            '<div class="mp-calc-title">계산기</div>' +
+            '<button type="button" class="mp-calc-close" data-action="close-calculator">✕</button>' +
           '</div>' +
+          '<div class="mp-calc-history">' + calcHistoryHTML() + '</div>' +
           '<div class="mp-calc-display">' + calcFormatDisplay(calcState.display) + '</div>' +
           '<div class="mp-calc-grid">' + keysHTML + '</div>' +
         '</div>' +
@@ -2120,13 +2166,13 @@
       renderCalculatorPanel();
       return;
     }
-    if(action === "calc-digit"){ calcInputDigit(el.dataset.digit); renderCalculatorPanel(); return; }
-    if(action === "calc-decimal"){ calcInputDecimal(); renderCalculatorPanel(); return; }
-    if(action === "calc-op"){ calcInputOperator(el.dataset.op); renderCalculatorPanel(); return; }
-    if(action === "calc-equals"){ calcEquals(); renderCalculatorPanel(); return; }
-    if(action === "calc-clear"){ calcClear(); renderCalculatorPanel(); return; }
-    if(action === "calc-backspace"){ calcBackspace(); renderCalculatorPanel(); return; }
-    if(action === "calc-percent"){ calcPercent(); renderCalculatorPanel(); return; }
+    if(action === "calc-digit"){ calcInputDigit(el.dataset.digit); updateCalcView(); return; }
+    if(action === "calc-decimal"){ calcInputDecimal(); updateCalcView(); return; }
+    if(action === "calc-op"){ calcInputOperator(el.dataset.op); updateCalcView(); return; }
+    if(action === "calc-equals"){ calcEquals(); updateCalcView(); return; }
+    if(action === "calc-clear"){ calcClear(); updateCalcView(); return; }
+    if(action === "calc-backspace"){ calcBackspace(); updateCalcView(); return; }
+    if(action === "calc-percent"){ calcPercent(); updateCalcView(); return; }
 
     if(action === "toggle-password-setup"){
       uiFlags.showPasswordSetup = true;
