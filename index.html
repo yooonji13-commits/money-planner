@@ -44,11 +44,11 @@
   @keyframes mp-tab-fade-in{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
 
   .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-fixed-toggle-btn, .mp-month-btn,
-  .mp-reset-btn, .mp-account:not(.is-expanded), .mp-color-swatch, .mp-log-toggle{
+  .mp-reset-btn, .mp-account:not(.is-expanded), .mp-color-swatch, .mp-log-toggle, .mp-calc-key{
     transition: transform .12s ease, background-color .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease, box-shadow .15s ease;
   }
   .mp-btn:active, .mp-icon-btn:active, .mp-sort-btn:active, .mp-fixed-toggle-btn:active,
-  .mp-month-btn:active, .mp-reset-btn:active, .mp-account:not(.is-expanded):active, .mp-log-toggle:active{
+  .mp-month-btn:active, .mp-reset-btn:active, .mp-account:not(.is-expanded):active, .mp-log-toggle:active, .mp-calc-key:active{
     transform: scale(.96);
   }
   .mp-tab:active{ transform: scale(.93); }
@@ -94,6 +94,7 @@
   }
   .mp-reset-btn:hover{ color:var(--negative); border-color:var(--negative); }
   #mp-sync-btn.is-paired{ color:var(--positive); border-color:var(--positive); }
+  #mp-calc-btn:hover{ color:var(--accent); border-color:var(--accent); }
 
   .mp-sync-overlay{
     position:fixed; inset:0; z-index:20; background:rgba(24,28,34,.4);
@@ -123,6 +124,22 @@
   .mp-sync-join-form input{
     flex:1; text-align:center; letter-spacing:.2em; font-variant-numeric:tabular-nums; font-size:1rem;
   }
+
+  .mp-calc-display{
+    font-size:2.1rem; font-weight:700; text-align:right; padding:18px 16px;
+    background:var(--surface-alt); border-radius:var(--radius-md); color:var(--ink);
+    font-variant-numeric:tabular-nums; overflow-x:auto; white-space:nowrap;
+  }
+  .mp-calc-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .mp-calc-key{
+    font-family:var(--font-ui); border:none; border-radius:var(--radius-md);
+    background:var(--surface-alt); color:var(--ink); font-size:1.2rem; font-weight:650;
+    padding:16px 0; cursor:pointer;
+  }
+  .mp-calc-key.op{ background:var(--surface-alt); color:var(--accent); }
+  .mp-calc-key.fn{ color:var(--muted); }
+  .mp-calc-key.equals{ background:var(--accent); color:#fff; }
+  .mp-calc-key.zero{ grid-column:span 2; }
 
   .mp-main{ flex:1; padding:14px 16px 104px; display:flex; flex-direction:column; gap:12px; }
   .mp-main.mp-util-tight-top{ padding-top:4px; }
@@ -455,12 +472,13 @@
       <button class="mp-reset-btn" id="mp-sync-btn" data-action="toggle-sync-panel" type="button">동기화</button>
       <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
       <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
-      <button class="mp-reset-btn" id="mp-reset-btn" data-action="reset-tab" type="button">초기화</button>
+      <button class="mp-reset-btn" id="mp-calc-btn" data-action="toggle-calculator" type="button">계산기</button>
     </div>
     <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
   <div id="mp-sync-panel"></div>
   <div id="mp-password-panel"></div>
+  <div id="mp-calculator-panel"></div>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
     <button class="mp-tab" data-tab="personal">
@@ -800,6 +818,120 @@
       '</div>';
   }
 
+  // ---------- 계산기 ----------
+  var calcState = { display: "0", stored: null, operator: null, waitingForOperand: false };
+  function calcFormatDisplay(raw){
+    if(raw === "오류") return raw;
+    var negative = raw.charAt(0) === "-";
+    var body = negative ? raw.slice(1) : raw;
+    var parts = body.split(".");
+    var intPart = parts[0] === "" ? "0" : parts[0];
+    return (negative ? "-" : "") + Number(intPart).toLocaleString("ko-KR") + (parts.length > 1 ? "." + parts[1] : "");
+  }
+  function calcCompute(a, b, op){
+    if(op === "+") return a + b;
+    if(op === "-") return a - b;
+    if(op === "×") return a * b;
+    if(op === "÷") return b === 0 ? NaN : a / b;
+    return b;
+  }
+  function calcResultString(n){
+    if(!isFinite(n)) return "오류";
+    return String(Math.round(n * 1e8) / 1e8);
+  }
+  function calcInputDigit(d){
+    if(calcState.display === "오류") calcState.display = "0";
+    if(calcState.waitingForOperand || calcState.display === "0"){
+      calcState.display = d;
+      calcState.waitingForOperand = false;
+    } else {
+      calcState.display += d;
+    }
+  }
+  function calcInputDecimal(){
+    if(calcState.waitingForOperand || calcState.display === "오류"){
+      calcState.display = "0.";
+      calcState.waitingForOperand = false;
+      return;
+    }
+    if(calcState.display.indexOf(".") === -1) calcState.display += ".";
+  }
+  function calcInputOperator(nextOp){
+    if(calcState.display === "오류") return;
+    var inputValue = parseFloat(calcState.display);
+    if(calcState.operator && !calcState.waitingForOperand){
+      calcState.stored = calcCompute(calcState.stored, inputValue, calcState.operator);
+      calcState.display = calcResultString(calcState.stored);
+    } else {
+      calcState.stored = inputValue;
+    }
+    calcState.operator = nextOp;
+    calcState.waitingForOperand = true;
+  }
+  function calcEquals(){
+    if(calcState.display === "오류" || calcState.operator == null || calcState.stored == null) return;
+    var inputValue = parseFloat(calcState.display);
+    var result = calcCompute(calcState.stored, inputValue, calcState.operator);
+    calcState.display = calcResultString(result);
+    calcState.stored = null;
+    calcState.operator = null;
+    calcState.waitingForOperand = true;
+  }
+  function calcClear(){
+    calcState = { display: "0", stored: null, operator: null, waitingForOperand: false };
+  }
+  function calcBackspace(){
+    if(calcState.waitingForOperand || calcState.display === "오류"){ calcClear(); return; }
+    calcState.display = calcState.display.length > 1 ? calcState.display.slice(0, -1) : "0";
+  }
+  function calcPercent(){
+    if(calcState.display === "오류") return;
+    calcState.display = calcResultString(parseFloat(calcState.display) / 100);
+  }
+  function renderCalculatorPanel(){
+    var panel = document.getElementById("mp-calculator-panel");
+    if(!panel) return;
+    if(!uiFlags.showCalculator){ panel.innerHTML = ""; return; }
+    var keys = [
+      { label: "C", action: "calc-clear", cls: "fn" },
+      { label: "⌫", action: "calc-backspace", cls: "fn" },
+      { label: "%", action: "calc-percent", cls: "fn" },
+      { label: "÷", action: "calc-op", op: "÷", cls: "op" },
+      { label: "7", action: "calc-digit", d: "7" },
+      { label: "8", action: "calc-digit", d: "8" },
+      { label: "9", action: "calc-digit", d: "9" },
+      { label: "×", action: "calc-op", op: "×", cls: "op" },
+      { label: "4", action: "calc-digit", d: "4" },
+      { label: "5", action: "calc-digit", d: "5" },
+      { label: "6", action: "calc-digit", d: "6" },
+      { label: "-", action: "calc-op", op: "-", cls: "op" },
+      { label: "1", action: "calc-digit", d: "1" },
+      { label: "2", action: "calc-digit", d: "2" },
+      { label: "3", action: "calc-digit", d: "3" },
+      { label: "+", action: "calc-op", op: "+", cls: "op" },
+      { label: "0", action: "calc-digit", d: "0", cls: "zero" },
+      { label: ".", action: "calc-decimal" },
+      { label: "=", action: "calc-equals", cls: "equals" }
+    ];
+    var keysHTML = keys.map(function(k){
+      return '<button type="button" class="mp-calc-key' + (k.cls ? ' ' + k.cls : '') + '" data-action="' + k.action + '"' +
+        (k.d !== undefined ? ' data-digit="' + k.d + '"' : '') +
+        (k.op !== undefined ? ' data-op="' + esc(k.op) + '"' : '') +
+        '>' + k.label + '</button>';
+    }).join("");
+    panel.innerHTML =
+      '<div class="mp-sync-overlay" data-action="close-calculator">' +
+        '<div class="mp-sync-modal" data-action="noop-stop">' +
+          '<div class="mp-sync-head">' +
+            '<div class="mp-sync-title">계산기</div>' +
+            '<button type="button" class="mp-sync-close" data-action="close-calculator">✕</button>' +
+          '</div>' +
+          '<div class="mp-calc-display">' + calcFormatDisplay(calcState.display) + '</div>' +
+          '<div class="mp-calc-grid">' + keysHTML + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
   function renderPasswordModal(){
     var panel = document.getElementById("mp-password-panel");
     if(!panel) return;
@@ -1097,7 +1229,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, showAnnualExpenses:false, editingAnnualExpense:null, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1222,7 +1354,6 @@
     return (negative ? -1 : 1) * Number(digits);
   }
 
-  var TAB_NAMES = { personal: "개인", living: "생활비", family: "저축", loan: "대출", utility: "관리비" };
   var UTILITY_CHART_FIELDS = { total: "전체", community: "커뮤니티", electricity: "전기료", water: "수도비", heating: "난방비", other: "기타" };
   var appHeader = document.getElementById("mp-header");
   function updateStickyOffset(){
@@ -1978,6 +2109,25 @@
       return;
     }
 
+    if(action === "toggle-calculator"){
+      uiFlags.showCalculator = !uiFlags.showCalculator;
+      if(uiFlags.showCalculator) calcClear();
+      renderCalculatorPanel();
+      return;
+    }
+    if(action === "close-calculator"){
+      uiFlags.showCalculator = false;
+      renderCalculatorPanel();
+      return;
+    }
+    if(action === "calc-digit"){ calcInputDigit(el.dataset.digit); renderCalculatorPanel(); return; }
+    if(action === "calc-decimal"){ calcInputDecimal(); renderCalculatorPanel(); return; }
+    if(action === "calc-op"){ calcInputOperator(el.dataset.op); renderCalculatorPanel(); return; }
+    if(action === "calc-equals"){ calcEquals(); renderCalculatorPanel(); return; }
+    if(action === "calc-clear"){ calcClear(); renderCalculatorPanel(); return; }
+    if(action === "calc-backspace"){ calcBackspace(); renderCalculatorPanel(); return; }
+    if(action === "calc-percent"){ calcPercent(); renderCalculatorPanel(); return; }
+
     if(action === "toggle-password-setup"){
       uiFlags.showPasswordSetup = true;
       uiFlags.passwordModalMode = null;
@@ -2000,39 +2150,6 @@
       uiFlags.passwordModalMode = "remove";
       uiFlags.passwordError = "";
       renderPasswordModal();
-      return;
-    }
-
-    if(action === "reset-tab"){
-      var tabName = TAB_NAMES[state.activeTab] || "현재 탭";
-      if(!confirm("정말 " + tabName + " 탭의 데이터를 모두 지우고 초기화할까요? 되돌릴 수 없어요.")) return;
-      if(state.activeTab === "personal"){
-        state.accounts = [];
-        state.logs = {};
-        state.personalPasswordHash = "";
-        personalUnlocked = false;
-        uiFlags.expandedAccounts = {};
-        uiFlags.editingSettings = {};
-        uiFlags.showFixed = {};
-        uiFlags.showAddAccount = false;
-      } else if(state.activeTab === "living"){
-        state.living = {};
-        uiFlags.showMonthPicker = false;
-      } else if(state.activeTab === "family"){
-        state.savings = {};
-        state.savingsExpenses = [];
-        uiFlags.showAnnualExpenses = false;
-        uiFlags.editingAnnualExpense = null;
-        uiFlags.savingsExpanded = false;
-      } else if(state.activeTab === "loan"){
-        state.loans = [];
-        uiFlags.expandedLoans = {};
-        uiFlags.editingLoanSettings = {};
-        uiFlags.showAddLoan = false;
-      } else if(state.activeTab === "utility"){
-        state.utilities = {};
-      }
-      saveState(); render();
       return;
     }
 
