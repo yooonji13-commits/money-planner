@@ -650,10 +650,15 @@
     // 동기화 갱신이 들어오면 입력 중이던 비밀번호 칸이 빈 칸으로 초기화돼 버린다.
     // 데이터는 그대로 반영해 두고, 화면은 잠금 화면을 벗어난 뒤 자연스럽게 최신 상태로 그려지게 한다.
     var onPersonalLockScreen = state.activeTab === "personal" && state.personalPasswordHash && !personalUnlocked;
+    // 같은 이유로, 지금 화면 어딘가의 입력칸에 커서가 가 있어서 타이핑 중일 때도 다시 그리지
+    // 않는다. render()가 그 입력칸 DOM 자체를 새로 만들어버리면 포커스(키패드)가 빠진다.
+    // 입력값은 blur/change 시점에 그때의 최신 state를 기준으로 다시 커밋되므로 안전하다.
+    var activeEl = document.activeElement;
+    var isEditingField = !!(activeEl && main.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA"));
     state = merged;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
-    if(!onPersonalLockScreen) render();
+    if(!onPersonalLockScreen && !isEditingField) render();
   }
 
   function subscribeRealtime(){
