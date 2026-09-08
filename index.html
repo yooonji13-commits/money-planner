@@ -1101,8 +1101,19 @@
     var mk = state.currentMonth;
     var totalEl = document.querySelector("#mp-main .mp-hero .mp-total");
     if(totalEl) totalEl.textContent = won(utilityTotal(getUtilityMonth(mk)));
-    var chartEl = document.querySelector("#mp-main .mp-util-chart");
-    if(chartEl) chartEl.outerHTML = utilityChartHTML(mk, uiFlags.utilityChartField);
+    var section = document.getElementById("mp-util-chart-section");
+    if(hasAnyUtilityData()){
+      var chartField = UTILITY_CHART_FIELDS[uiFlags.utilityChartField] ? uiFlags.utilityChartField : "total";
+      if(section){
+        var chartEl = section.querySelector(".mp-util-chart");
+        if(chartEl) chartEl.outerHTML = utilityChartHTML(mk, chartField);
+      } else if(state.activeTab === "utility"){
+        // 지금까지 0원이라 숨겨져 있던 그래프 카드를, 처음 실제 값이 저장되는 순간 새로 넣어준다.
+        main.insertAdjacentHTML("beforeend", utilityChartSectionHTML(mk, chartField));
+      }
+    } else if(section){
+      section.remove();
+    }
   }
   function commitPendingSavingsFields(){
     if(state.activeTab !== "family" || !uiFlags.savingsExpanded) return;
@@ -1988,7 +1999,16 @@
         '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
       '</section>' +
     '</div>' +
-      '<section class="mp-card" style="margin-top:10px;margin-bottom:10px;">' +
+      (hasAnyUtilityData() ? utilityChartSectionHTML(mk, chartField) : "");
+  }
+  // 실제로 입력된(0원이 아닌) 달이 하나도 없으면 그래프를 보여줄 이유가 없다.
+  function hasAnyUtilityData(){
+    return Object.keys(state.utilities || {}).some(function(k){
+      return utilityTotal(state.utilities[k]) > 0;
+    });
+  }
+  function utilityChartSectionHTML(mk, chartField){
+    return '<section class="mp-card" id="mp-util-chart-section" style="margin-top:10px;margin-bottom:10px;">' +
         '<div class="mp-label" style="margin-bottom:2px;">월별 관리비 변화</div>' +
         '<div class="mp-util-chart-tabs">' +
           Object.keys(UTILITY_CHART_FIELDS).map(function(f){
@@ -2404,6 +2424,7 @@
     if(action === "save-utility"){
       commitPendingUtilityFields();
       saveState();
+      updateUtilityDisplay();
       var savedLabel = el.textContent;
       el.textContent = "저장됨 ✓";
       el.disabled = true;
