@@ -1049,9 +1049,10 @@
       '<div class="mp-sync-overlay" data-action="close-livingfixed">' +
         '<div class="mp-sync-modal" data-action="noop-stop">' +
           '<div class="mp-sync-head">' +
-            '<div class="mp-sync-title">생활비 고정내역</div>' +
+            '<div class="mp-sync-title">고정내역</div>' +
             '<button type="button" class="mp-sync-close" data-action="close-livingfixed">✕</button>' +
           '</div>' +
+          '<div class="mp-label">생활비 고정내역</div>' +
           '<div class="mp-lf-table-wrap">' +
             '<table class="mp-lf-table">' +
               '<thead><tr><th>분류</th><th>내용</th><th>금액</th><th>비고</th><th></th></tr></thead>' +
@@ -1060,6 +1061,10 @@
           '</div>' +
           '<div class="mp-lf-total-row"><span>합계</span><b>' + won(livingFixedTotal()) + '</b></div>' +
           '<button type="button" class="mp-btn ghost block" data-action="add-lf-item">+ 항목 추가</button>' +
+          '<div class="mp-tools-row">' +
+            '<button class="mp-fixed-toggle-btn' + (uiFlags.showAnnualExpenses ? ' active' : '') + '" data-action="toggle-annual-expenses">' + (uiFlags.showAnnualExpenses ? '연례지출내역 접기 ▴' : '연례지출내역 ▾') + '</button>' +
+          '</div>' +
+          (uiFlags.showAnnualExpenses ? renderAnnualExpensesHTML() : '') +
         '</div>' +
       '</div>';
   }
@@ -1517,6 +1522,16 @@
     document.querySelectorAll(".mp-tab").forEach(function(btn){
       btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
     });
+    // 대출/관리비 탭에서는 '고정내역'이 어울리지 않아 헤더에서 숨긴다.
+    var lfBtn = document.getElementById("mp-lf-btn");
+    if(lfBtn){
+      var hideLfBtn = state.activeTab === "loan" || state.activeTab === "utility";
+      lfBtn.hidden = hideLfBtn;
+      if(hideLfBtn && uiFlags.showLivingFixed){
+        uiFlags.showLivingFixed = false;
+        renderLivingFixedPanel();
+      }
+    }
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderSavings();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
@@ -1744,7 +1759,6 @@
     var year = parseInt(mk.slice(0,4), 10);
     var expanded = uiFlags.savingsExpanded;
     var totalAll = totalSavingsAllTime();
-    var showAnnual = uiFlags.showAnnualExpenses;
 
     var html = '<div class="mp-tab-sticky">' +
       '<section class="mp-card mp-hero">' +
@@ -1757,11 +1771,7 @@
           '<button class="mp-month-btn" data-action="savings-year-prev">‹</button>' +
           '<div class="mp-month-label">' + year + '년 저축</div>' +
           '<button class="mp-month-btn" data-action="savings-year-next">›</button>' +
-        '</div>') +
-      '<div class="mp-tools-row">' +
-        '<button class="mp-fixed-toggle-btn' + (showAnnual ? ' active' : '') + '" data-action="toggle-annual-expenses">' + (showAnnual ? '연례지출내역 접기 ▴' : '연례지출내역 ▾') + '</button>' +
-      '</div>' +
-      (showAnnual ? renderAnnualExpensesHTML() : '');
+        '</div>');
 
     if(expanded){
       var sm = getSavingsMonth(mk);
@@ -2419,7 +2429,7 @@
     if(action === "toggle-annual-expenses"){
       uiFlags.showAnnualExpenses = !uiFlags.showAnnualExpenses;
       if(!uiFlags.showAnnualExpenses) uiFlags.editingAnnualExpense = null;
-      render(); return;
+      renderLivingFixedPanel(); return;
     }
     if(action === "toggle-savings-month"){
       commitPendingSavingsFields();
@@ -2443,16 +2453,16 @@
     }
     if(action === "start-edit-annual-expense"){
       uiFlags.editingAnnualExpense = el.dataset.id;
-      render(); return;
+      renderLivingFixedPanel(); return;
     }
     if(action === "cancel-edit-annual-expense"){
       uiFlags.editingAnnualExpense = null;
-      render(); return;
+      renderLivingFixedPanel(); return;
     }
     if(action === "delete-annual-expense"){
       state.savingsExpenses = state.savingsExpenses.filter(function(f){ return f.id !== el.dataset.id; });
       if(uiFlags.editingAnnualExpense === el.dataset.id) uiFlags.editingAnnualExpense = null;
-      saveState(); render(); return;
+      saveState(); renderLivingFixedPanel(); return;
     }
     if(action === "delete-savings-tx"){
       var sm = getSavingsMonth(state.currentMonth);
@@ -3068,7 +3078,7 @@
       var aeMonth = Math.min(12, Math.max(1, parseInt(fd.get("month"), 10) || 1));
       if(!aeName || aeAmount <= 0) return;
       state.savingsExpenses.push({ id: uid(), name: aeName, amount: aeAmount, month: aeMonth });
-      saveState(); render(); return;
+      saveState(); renderLivingFixedPanel(); return;
     }
     if(action === "save-annual-expense"){
       var aeEntry = state.savingsExpenses.find(function(f){ return f.id === form.dataset.id; });
@@ -3081,7 +3091,7 @@
       aeEntry.amount = newAeAmount;
       aeEntry.month = newAeMonth;
       uiFlags.editingAnnualExpense = null;
-      saveState(); render(); return;
+      saveState(); renderLivingFixedPanel(); return;
     }
 
     if(action === "add-tx"){
