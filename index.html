@@ -160,20 +160,29 @@
   .mp-calc-key.equals{ background:var(--accent); color:#fff; }
   .mp-calc-key.zero{ grid-column:span 2; }
 
-  .mp-lf-table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius-md); -webkit-overflow-scrolling:touch; }
-  .mp-lf-table{ width:100%; min-width:440px; border-collapse:collapse; font-size:.74rem; }
+  .mp-lf-table-wrap{ border:1px solid var(--line); border-radius:var(--radius-md); overflow:hidden; }
+  /* 좁은 화면에서도 삭제(✕) 칸까지 한 화면에 들어오도록 폭을 비율로 고정한다. */
+  .mp-lf-table{ width:100%; border-collapse:collapse; font-size:.72rem; table-layout:fixed; }
   .mp-lf-table th{
     background:var(--surface-alt); color:var(--muted); font-weight:700; text-align:left;
-    padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; position:sticky; top:0;
+    padding:6px 4px; border-bottom:1px solid var(--line); white-space:nowrap;
   }
   .mp-lf-table th:nth-child(3){ text-align:right; }
+  .mp-lf-table th:nth-child(1), .mp-lf-table td:nth-child(1){ width:19%; }
+  .mp-lf-table th:nth-child(2), .mp-lf-table td:nth-child(2){ width:26%; }
+  .mp-lf-table th:nth-child(3), .mp-lf-table td:nth-child(3){ width:25%; }
+  .mp-lf-table th:nth-child(4), .mp-lf-table td:nth-child(4){ width:22%; }
+  .mp-lf-table th:nth-child(5), .mp-lf-table td:nth-child(5){ width:8%; padding-left:0; padding-right:0; }
   .mp-lf-table td{ padding:1px 3px; border-bottom:1px solid var(--line); vertical-align:middle; background:var(--surface); }
   .mp-lf-input{
-    width:100%; border:none; background:none; padding:6px 4px; font-size:.74rem; color:var(--ink);
+    width:100%; border:none; background:none; padding:6px 2px; font-size:.72rem; color:var(--ink);
     font-family:var(--font-ui);
   }
   .mp-lf-amount{ text-align:right; }
-  .mp-lf-del{ background:none; border:none; color:var(--muted); font-size:.8rem; cursor:pointer; padding:2px 6px; }
+  .mp-lf-del{
+    background:none; border:none; color:var(--muted); font-size:.82rem; cursor:pointer;
+    padding:6px 0; width:100%; line-height:1;
+  }
   .mp-lf-total-row{
     display:flex; justify-content:space-between; align-items:center; padding:4px 4px;
     font-size:.9rem; font-weight:800;
@@ -511,14 +520,14 @@
       <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
       <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
       <button class="mp-reset-btn" id="mp-calc-btn" data-action="toggle-calculator" type="button">계산기</button>
-      <button class="mp-reset-btn" id="mp-lf-btn" data-action="toggle-livingfixed" type="button">고정내역</button>
+      <button class="mp-reset-btn" id="mp-lf-btn" data-action="toggle-fixed-items" type="button">고정내역</button>
     </div>
     <input type="file" id="mp-import-input" accept="application/json,.json" style="display:none;">
   </header>
   <div id="mp-sync-panel"></div>
   <div id="mp-password-panel"></div>
   <div id="mp-calculator-panel"></div>
-  <div id="mp-livingfixed-panel"></div>
+  <div id="mp-fixed-panel"></div>
   <main class="mp-main" id="mp-main"></main>
   <nav class="mp-tabbar">
     <button class="mp-tab" data-tab="personal">
@@ -557,6 +566,10 @@
     return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
+  // 고정내역을 따로 쓸 수 있는 탭들. 탭마다 목록이 완전히 분리된다.
+  var FIXED_ITEM_TABS = ["personal", "living", "family"];
+  var FIXED_ITEM_TAB_LABELS = { personal: "개인", living: "생활비", family: "저축" };
+
   function defaultState(){
     return {
       activeTab: "personal",
@@ -568,12 +581,23 @@
       living: {},
       loans: [],
       utilities: {},
-      livingFixedItems: [],
+      fixedItemsByTab: { personal: [], living: [], family: [] },
       personalPasswordHash: ""
     };
   }
 
   function migrateReflectedFlags(s){
+    // 고정내역은 탭(개인/생활비/저축)마다 완전히 따로 관리한다. 예전에는 탭 구분 없이
+    // livingFixedItems 한 곳에만 저장했기 때문에, 남아있는 값은 생활비 탭 것으로 옮긴다.
+    if(!s.fixedItemsByTab || typeof s.fixedItemsByTab !== "object") s.fixedItemsByTab = {};
+    if(Array.isArray(s.livingFixedItems) && s.livingFixedItems.length &&
+       (!Array.isArray(s.fixedItemsByTab.living) || !s.fixedItemsByTab.living.length)){
+      s.fixedItemsByTab.living = s.livingFixedItems;
+    }
+    delete s.livingFixedItems;
+    FIXED_ITEM_TABS.forEach(function(k){
+      if(!Array.isArray(s.fixedItemsByTab[k])) s.fixedItemsByTab[k] = [];
+    });
     (s.accounts || []).forEach(function(a){
       if(!Array.isArray(a.fixedExpenses)) a.fixedExpenses = [];
     });
@@ -608,7 +632,7 @@
         living: parsed.living || {},
         loans: parsed.loans || [],
         utilities: parsed.utilities || {},
-        livingFixedItems: parsed.livingFixedItems || []
+        fixedItemsByTab: parsed.fixedItemsByTab || d.fixedItemsByTab
       });
       migrateReflectedFlags(merged);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -698,7 +722,7 @@
       living: remoteData.living || {},
       loans: remoteData.loans || [],
       utilities: remoteData.utilities || {},
-      livingFixedItems: remoteData.livingFixedItems || d.livingFixedItems,
+      fixedItemsByTab: remoteData.fixedItemsByTab || d.fixedItemsByTab,
       // 어느 탭/몇 월을 보고 있는지는 기기별 화면 상태일 뿐이라 동기화 대상이 아니다.
       // 원격 갱신을 받아도 지금 보고 있는 탭/월은 그대로 유지한다 (안 그러면 다른 기기나
       // 남아있던 탭이 저축 탭에 있을 때 실시간 갱신이 올 때마다 현재 화면이 그쪽으로 튕겨나간다).
@@ -715,7 +739,7 @@
     // 않는다. render()가 그 입력칸 DOM 자체를 새로 만들어버리면 포커스(키패드)가 빠진다.
     // 입력값은 blur/change 시점에 그때의 최신 state를 기준으로 다시 커밋되므로 안전하다.
     var activeEl = document.activeElement;
-    var isEditingField = !!(activeEl && main.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA"));
+    var isEditingField = !!(activeEl && root.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA"));
     state = merged;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
@@ -1003,13 +1027,18 @@
       '</div>';
   }
 
-  // ---------- 생활비 고정내역 ----------
-  function livingFixedTotal(){
-    return (state.livingFixedItems || []).reduce(function(s, it){ return s + Number(it.amount || 0); }, 0);
+  // ---------- 고정내역 (탭별로 따로 관리) ----------
+  function getFixedItems(){
+    if(!state.fixedItemsByTab || typeof state.fixedItemsByTab !== "object") state.fixedItemsByTab = {};
+    var key = FIXED_ITEM_TABS.indexOf(state.activeTab) >= 0 ? state.activeTab : "living";
+    if(!Array.isArray(state.fixedItemsByTab[key])) state.fixedItemsByTab[key] = [];
+    return state.fixedItemsByTab[key];
   }
-  function livingFixedRowsHTML(){
-    var items = state.livingFixedItems || [];
-    return items.map(function(it){
+  function fixedItemsTotal(){
+    return getFixedItems().reduce(function(s, it){ return s + Number(it.amount || 0); }, 0);
+  }
+  function fixedItemsRowsHTML(){
+    return getFixedItems().map(function(it){
       return '<tr class="mp-lf-row" data-id="' + it.id + '">' +
           '<td><input type="text" class="mp-lf-input" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류"></td>' +
           '<td><input type="text" class="mp-lf-input" data-action="edit-lf-name" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="내용"></td>' +
@@ -1019,29 +1048,29 @@
         '</tr>';
     }).join("");
   }
-  function updateLivingFixedTotal(){
-    var totalEl = document.querySelector("#mp-livingfixed-panel .mp-lf-total-row b");
-    if(totalEl) totalEl.textContent = won(livingFixedTotal());
+  function updateFixedItemsTotal(){
+    var totalEl = document.querySelector("#mp-fixed-panel .mp-lf-total-row b");
+    if(totalEl) totalEl.textContent = won(fixedItemsTotal());
   }
-  function renderLivingFixedPanel(){
-    var panel = document.getElementById("mp-livingfixed-panel");
+  function renderFixedItemsPanel(){
+    var panel = document.getElementById("mp-fixed-panel");
     if(!panel) return;
-    if(!uiFlags.showLivingFixed){ panel.innerHTML = ""; return; }
+    if(!uiFlags.showFixedItems){ panel.innerHTML = ""; return; }
+    var tabLabel = FIXED_ITEM_TAB_LABELS[state.activeTab] || "";
     panel.innerHTML =
-      '<div class="mp-sync-overlay" data-action="close-livingfixed">' +
+      '<div class="mp-sync-overlay" data-action="close-fixed-items">' +
         '<div class="mp-sync-modal" data-action="noop-stop">' +
           '<div class="mp-sync-head">' +
-            '<div class="mp-sync-title">고정내역</div>' +
-            '<button type="button" class="mp-sync-close" data-action="close-livingfixed">✕</button>' +
+            '<div class="mp-sync-title">' + esc(tabLabel) + ' 고정내역</div>' +
+            '<button type="button" class="mp-sync-close" data-action="close-fixed-items">✕</button>' +
           '</div>' +
-          '<div class="mp-label">생활비 고정내역</div>' +
           '<div class="mp-lf-table-wrap">' +
             '<table class="mp-lf-table">' +
               '<thead><tr><th>분류</th><th>내용</th><th>금액</th><th>비고</th><th></th></tr></thead>' +
-              '<tbody>' + livingFixedRowsHTML() + '</tbody>' +
+              '<tbody>' + fixedItemsRowsHTML() + '</tbody>' +
             '</table>' +
           '</div>' +
-          '<div class="mp-lf-total-row"><span>합계</span><b>' + won(livingFixedTotal()) + '</b></div>' +
+          '<div class="mp-lf-total-row"><span>합계</span><b>' + won(fixedItemsTotal()) + '</b></div>' +
           '<button type="button" class="mp-btn ghost block" data-action="add-lf-item">+ 항목 추가</button>' +
         '</div>' +
       '</div>';
@@ -1355,7 +1384,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showLivingFixed:false };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false };
   var personalUnlocked = false;
 
   function sha256Hex(text){
@@ -1503,13 +1532,14 @@
     // 대출/관리비 탭에서는 '고정내역'이 어울리지 않아 헤더에서 숨긴다.
     var lfBtn = document.getElementById("mp-lf-btn");
     if(lfBtn){
-      var hideLfBtn = state.activeTab === "loan" || state.activeTab === "utility";
+      var hideLfBtn = FIXED_ITEM_TABS.indexOf(state.activeTab) < 0;
       lfBtn.hidden = hideLfBtn;
-      if(hideLfBtn && uiFlags.showLivingFixed){
-        uiFlags.showLivingFixed = false;
-        renderLivingFixedPanel();
-      }
+      if(hideLfBtn && uiFlags.showFixedItems) uiFlags.showFixedItems = false;
     }
+    // 고정내역은 탭마다 목록이 다르므로, 열려있는 동안 탭/데이터가 바뀌면 다시 그린다.
+    // 단, 그 안의 입력칸을 쓰고 있는 중이면 건드리지 않는다(포커스가 빠지기 때문).
+    var fixedPanelEl = document.getElementById("mp-fixed-panel");
+    if(fixedPanelEl && !fixedPanelEl.contains(document.activeElement)) renderFixedItemsPanel();
     if(state.activeTab === "personal") main.innerHTML = renderPersonal();
     else if(state.activeTab === "family") main.innerHTML = renderSavings();
     else if(state.activeTab === "loan") main.innerHTML = renderLoan();
@@ -2228,27 +2258,28 @@
     if(action === "calc-backspace"){ calcBackspace(); updateCalcView(); return; }
     if(action === "calc-percent"){ calcPercent(); updateCalcView(); return; }
 
-    if(action === "toggle-livingfixed"){
-      uiFlags.showLivingFixed = !uiFlags.showLivingFixed;
-      renderLivingFixedPanel();
+    if(action === "toggle-fixed-items"){
+      uiFlags.showFixedItems = !uiFlags.showFixedItems;
+      renderFixedItemsPanel();
       return;
     }
-    if(action === "close-livingfixed"){
-      uiFlags.showLivingFixed = false;
-      renderLivingFixedPanel();
+    if(action === "close-fixed-items"){
+      uiFlags.showFixedItems = false;
+      renderFixedItemsPanel();
       return;
     }
     if(action === "add-lf-item"){
-      if(!Array.isArray(state.livingFixedItems)) state.livingFixedItems = [];
-      state.livingFixedItems.push({ id: uid(), category: "", name: "", amount: 0, note: "" });
+      getFixedItems().push({ id: uid(), category: "", name: "", amount: 0, note: "" });
       saveState();
-      renderLivingFixedPanel();
+      renderFixedItemsPanel();
       return;
     }
     if(action === "delete-lf-item"){
-      state.livingFixedItems = (state.livingFixedItems || []).filter(function(it){ return it.id !== el.dataset.id; });
+      var lfList = getFixedItems();
+      var lfIdx = lfList.findIndex(function(it){ return it.id === el.dataset.id; });
+      if(lfIdx >= 0) lfList.splice(lfIdx, 1);
       saveState();
-      renderLivingFixedPanel();
+      renderFixedItemsPanel();
       return;
     }
 
@@ -2582,10 +2613,10 @@
     }
 
     if(el.dataset.action === "edit-lf-amount"){
-      var lfItemLive = (state.livingFixedItems || []).find(function(it){ return it.id === el.dataset.id; });
+      var lfItemLive = getFixedItems().find(function(it){ return it.id === el.dataset.id; });
       if(lfItemLive){
         lfItemLive.amount = Math.abs(parseMoneyValue(el.value));
-        updateLivingFixedTotal();
+        updateFixedItemsTotal();
       }
     }
 
@@ -2829,24 +2860,15 @@
       return;
     }
 
-    if(action === "edit-lf-name" || action === "edit-lf-note" || action === "edit-lf-amount"){
-      var lfItem = (state.livingFixedItems || []).find(function(it){ return it.id === el.dataset.id; });
+    if(action === "edit-lf-category" || action === "edit-lf-name" || action === "edit-lf-note" || action === "edit-lf-amount"){
+      var lfItem = getFixedItems().find(function(it){ return it.id === el.dataset.id; });
       if(lfItem){
-        if(action === "edit-lf-name") lfItem.name = el.value;
+        if(action === "edit-lf-category") lfItem.category = el.value;
+        else if(action === "edit-lf-name") lfItem.name = el.value;
         else if(action === "edit-lf-note") lfItem.note = el.value;
         else lfItem.amount = Math.abs(parseMoneyValue(el.value));
         saveState();
-        if(action === "edit-lf-amount") updateLivingFixedTotal();
-      }
-      return;
-    }
-    if(action === "edit-lf-category"){
-      // 분류가 바뀌면 행 그룹핑(구분 표시줄)이 달라질 수 있어 목록 전체를 다시 그린다.
-      var lfCatItem = (state.livingFixedItems || []).find(function(it){ return it.id === el.dataset.id; });
-      if(lfCatItem){
-        lfCatItem.category = el.value;
-        saveState();
-        renderLivingFixedPanel();
+        if(action === "edit-lf-amount") updateFixedItemsTotal();
       }
       return;
     }
