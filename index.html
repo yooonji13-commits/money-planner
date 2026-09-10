@@ -173,14 +173,14 @@
   }
   /* 입력 형식은 생활비 지출 내역(폼 + 목록)과 같은 모양을 따른다. */
   .mp-lf-add{
-    display:grid; grid-template-columns:54px 1fr 74px 50px auto; gap:6px; margin-top:4px; align-items:center;
+    display:grid; grid-template-columns:50px 1fr 86px 44px auto; gap:5px; margin-top:4px; align-items:center;
   }
   .mp-lf-add > *{ min-width:0; }
-  .mp-lf-add input{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; width:100%; }
+  .mp-lf-add input, .mp-lf-add select{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; width:100%; }
   .mp-lf-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
   .mp-lf-list{ display:flex; flex-direction:column; }
   .mp-lf-row{
-    display:grid; grid-template-columns:54px 1fr 74px 50px 22px; gap:6px; align-items:center;
+    display:grid; grid-template-columns:50px 1fr 86px 44px 22px; gap:5px; align-items:center;
     padding:9px 0; border-top:1px solid var(--line); font-size:.85rem;
   }
   .mp-lf-row > *{ min-width:0; }
@@ -194,6 +194,19 @@
   .mp-lf-row .mp-lf-amt-edit{ font-variant-numeric:tabular-nums; font-weight:650; text-align:right; }
   .mp-lf-row .mp-lf-note-edit{ color:var(--muted); font-size:.68rem; overflow:hidden; text-overflow:ellipsis; }
   .mp-lf-row .mp-icon-btn{ padding:2px; justify-self:end; }
+  .mp-lf-row select.mp-lf-cat-edit{
+    border:none; background:none; padding:2px 0; font-size:.72rem; font-family:var(--font-ui);
+    color:var(--muted); height:auto; width:100%; -webkit-appearance:none; appearance:none;
+  }
+  .mp-lf-row select.mp-lf-cat-edit:focus{ background:var(--surface-alt); outline:none; }
+  /* 분류별로 묶어서 보여줄 때의 머리줄 (분류 이름 + 그 분류 합계) */
+  .mp-lf-group{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    margin-top:10px; padding:5px 8px; border-radius:8px; background:var(--surface-alt);
+    font-size:.72rem; font-weight:800; color:var(--ink);
+  }
+  .mp-lf-group b{ font-variant-numeric:tabular-nums; }
+  .mp-lf-group + .mp-lf-row{ border-top:none; }
   .mp-lf-total-row{
     display:flex; justify-content:space-between; align-items:center; padding:4px 4px;
     font-size:.9rem; font-weight:800;
@@ -580,6 +593,8 @@
   // 고정내역을 따로 쓸 수 있는 탭들. 탭마다 목록이 완전히 분리된다.
   var FIXED_ITEM_TABS = ["personal", "living", "family"];
   var FIXED_ITEM_TAB_LABELS = { personal: "개인", living: "생활비", family: "저축" };
+  // 생활비 고정내역은 분류를 직접 적지 않고 아래 셋 중에서 고른다.
+  var LIVING_FIXED_CATEGORIES = ["정훈", "윤지", "기타"];
 
   function defaultState(){
     return {
@@ -1048,20 +1063,71 @@
   function fixedItemsTotal(){
     return getFixedItems().reduce(function(s, it){ return s + Number(it.amount || 0); }, 0);
   }
+  function isLivingFixedTab(){ return state.activeTab === "living"; }
+  // 저장된 분류가 목록에 없는 값(예전에 직접 적어둔 값)이면 그 값도 선택지에 넣어준다.
+  function livingCategoryOptions(selected){
+    var list = LIVING_FIXED_CATEGORIES.slice();
+    if(selected && list.indexOf(selected) < 0) list.unshift(selected);
+    return list.map(function(c){
+      return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
+    }).join("");
+  }
+  function fixedItemRowHTML(it){
+    var catField = isLivingFixedTab() ?
+      '<select class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '">' +
+        livingCategoryOptions(it.category || "") +
+      '</select>' :
+      '<input type="text" class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류">';
+    return '<div class="mp-lf-row" data-id="' + it.id + '">' +
+        catField +
+        '<input type="text" class="mp-lf-name-edit" data-action="edit-lf-name" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="내용">' +
+        '<input type="text" inputmode="numeric" class="mp-money mp-lf-amt-edit" data-action="edit-lf-amount" data-id="' + it.id + '" value="' + (it.amount ? formatNumberString(it.amount) : "") + '" placeholder="0">' +
+        '<input type="text" class="mp-lf-note-edit" data-action="edit-lf-note" data-id="' + it.id + '" value="' + esc(it.note || "") + '" placeholder="비고">' +
+        '<button type="button" class="mp-icon-btn" data-action="delete-lf-item" data-id="' + it.id + '">✕</button>' +
+      '</div>';
+  }
   function fixedItemsRowsHTML(){
-    return getFixedItems().map(function(it){
-      return '<div class="mp-lf-row" data-id="' + it.id + '">' +
-          '<input type="text" class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류">' +
-          '<input type="text" class="mp-lf-name-edit" data-action="edit-lf-name" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="내용">' +
-          '<input type="text" inputmode="numeric" class="mp-money mp-lf-amt-edit" data-action="edit-lf-amount" data-id="' + it.id + '" value="' + (it.amount ? formatNumberString(it.amount) : "") + '" placeholder="0">' +
-          '<input type="text" class="mp-lf-note-edit" data-action="edit-lf-note" data-id="' + it.id + '" value="' + esc(it.note || "") + '" placeholder="비고">' +
-          '<button type="button" class="mp-icon-btn" data-action="delete-lf-item" data-id="' + it.id + '">✕</button>' +
-        '</div>';
+    var items = getFixedItems();
+    if(!isLivingFixedTab()) return items.map(fixedItemRowHTML).join("");
+
+    // 생활비 탭은 분류(정훈/윤지/기타)별로 묶어서 보여준다. 목록에 없는 분류나 빈 분류도
+    // 데이터를 건드리지 않고 그대로 자기 묶음으로 보여준다(빈 값은 "기타"로 묶는다).
+    var order = [];
+    var buckets = {};
+    items.forEach(function(it){
+      var key = it.category || "기타";
+      if(!buckets[key]){ buckets[key] = []; order.push(key); }
+      buckets[key].push(it);
+    });
+    order.sort(function(a, b){
+      var ia = LIVING_FIXED_CATEGORIES.indexOf(a), ib = LIVING_FIXED_CATEGORIES.indexOf(b);
+      if(ia < 0) ia = LIVING_FIXED_CATEGORIES.length;
+      if(ib < 0) ib = LIVING_FIXED_CATEGORIES.length;
+      return ia - ib;
+    });
+    return order.map(function(key){
+      var list = buckets[key];
+      var sum = list.reduce(function(acc, it){ return acc + Number(it.amount || 0); }, 0);
+      return '<div class="mp-lf-group" data-cat="' + esc(key) + '"><span>' + esc(key) + '</span><b>' + won(sum) + '</b></div>' +
+        list.map(fixedItemRowHTML).join("");
     }).join("");
   }
   function updateFixedItemsTotal(){
-    var totalEl = document.querySelector("#mp-fixed-panel .mp-lf-total-row b");
+    var panel = document.getElementById("mp-fixed-panel");
+    if(!panel) return;
+    var totalEl = panel.querySelector(".mp-lf-total-row b");
     if(totalEl) totalEl.textContent = won(fixedItemsTotal());
+    // 분류별 묶음 합계도 같이 갱신한다. 목록을 통째로 다시 그리면 옆 칸으로 넘어가던
+    // 포커스가 빠지기 때문에, 숫자만 바꿔 끼운다.
+    var items = getFixedItems();
+    panel.querySelectorAll(".mp-lf-group").forEach(function(g){
+      var key = g.dataset.cat;
+      var sum = items.reduce(function(acc, it){
+        return ((it.category || "기타") === key) ? acc + Number(it.amount || 0) : acc;
+      }, 0);
+      var b = g.querySelector("b");
+      if(b) b.textContent = won(sum);
+    });
   }
   function renderFixedItemsPanel(){
     var panel = document.getElementById("mp-fixed-panel");
@@ -1077,7 +1143,9 @@
             '<button type="button" class="mp-sync-close" data-action="close-fixed-items">✕</button>' +
           '</div>' +
           '<form class="mp-lf-add" data-action="add-fixed-item">' +
-            '<input type="text" name="category" placeholder="분류">' +
+            (isLivingFixedTab() ?
+              '<select name="category">' + livingCategoryOptions(LIVING_FIXED_CATEGORIES[0]) + '</select>' :
+              '<input type="text" name="category" placeholder="분류">') +
             '<input type="text" name="name" placeholder="내용" required>' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
             '<input type="text" name="note" placeholder="비고">' +
@@ -2877,7 +2945,10 @@
         else if(action === "edit-lf-note") lfItem.note = el.value;
         else lfItem.amount = Math.abs(parseMoneyValue(el.value));
         saveState();
-        if(action === "edit-lf-amount") updateFixedItemsTotal();
+        // 분류가 바뀌면 묶이는 위치 자체가 달라지므로 목록을 다시 그린다(드롭다운을 고른
+        // 직후라 입력 중이 아니다). 금액은 합계 숫자만 갈아끼운다.
+        if(action === "edit-lf-category" && isLivingFixedTab()) renderFixedItemsPanel();
+        else if(action === "edit-lf-amount") updateFixedItemsTotal();
       }
       return;
     }
