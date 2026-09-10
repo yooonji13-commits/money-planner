@@ -463,7 +463,11 @@
   /* progress bar */
   .mp-progress{ height:6px; border-radius:99px; background:var(--surface-alt); overflow:hidden; margin-top:10px; }
   .mp-progress > div{ height:100%; border-radius:99px; background:var(--accent); }
-  .mp-progress.warn > div{ background:var(--warning); }
+  /* 쓴 비율이 올라갈수록 연한 색에서 진한 색으로, 기준 금액을 넘기면 빨강 */
+  .mp-progress.lv1 > div{ background:#BBD5FB; }
+  .mp-progress.lv2 > div{ background:#7FB0F8; }
+  .mp-progress.lv3 > div{ background:var(--accent); }
+  .mp-progress.lv4 > div{ background:#1B5FC1; }
   .mp-progress.over > div{ background:var(--negative); }
   .mp-carry-btn{ margin-top:12px; }
 
@@ -1305,6 +1309,20 @@
       return sum + savingsNet(state.savings[mk]);
     }, 0);
   }
+  // 생활비 진행바. 기준 금액 대비 '실제로 쓴 만큼'(지출에서 입금을 뺀 값)을 쓴다.
+  // 입금을 빼지 않으면 아직 돈이 남았는데도 다 쓴 것처럼 빨갛게 꽉 차 보인다.
+  function livingBarState(budget, spent, received){
+    budget = Number(budget || 0);
+    var used = Math.max(0, Number(spent || 0) - Number(received || 0));
+    var pct = budget > 0 ? Math.min(100, (used / budget) * 100) : (used > 0 ? 100 : 0);
+    var cls;
+    if(budget > 0 && used > budget) cls = "over";
+    else if(pct >= 90) cls = "lv4";
+    else if(pct >= 75) cls = "lv3";
+    else if(pct >= 50) cls = "lv2";
+    else cls = "lv1";
+    return { pct: pct, cls: cls };
+  }
   function getLivingMonth(key){
     if(!state.living[key]) state.living[key] = { budget: 0, tx: [] };
     return state.living[key];
@@ -1499,8 +1517,8 @@
       totalEl.classList.toggle("neg", remain < 0);
       totalEl.classList.toggle("pos", remain >= 0);
     }
-    var pct = lm.budget > 0 ? Math.min(100,(spent/lm.budget)*100) : (spent>0?100:0);
-    var barClass = spent > lm.budget && lm.budget>0 ? "over" : (pct>=85?"warn":"");
+    var bar = livingBarState(lm.budget, spent, received);
+    var pct = bar.pct, barClass = bar.cls;
     var barEl = hero.querySelector(".mp-progress");
     if(barEl){
       barEl.className = "mp-progress " + barClass;
@@ -2003,8 +2021,8 @@
     var spent = m.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
     var received = m.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
     var remain = Number(m.budget||0) - spent + received;
-    var pct = m.budget > 0 ? Math.min(100,(spent/m.budget)*100) : (spent>0?100:0);
-    var barClass = spent > m.budget && m.budget>0 ? "over" : (pct>=85?"warn":"");
+    var bar = livingBarState(m.budget, spent, received);
+    var pct = bar.pct, barClass = bar.cls;
     var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
 
     return '<div class="mp-tab-sticky">' +
@@ -2802,8 +2820,8 @@
           livingTotalEl.classList.toggle("neg", liveRemain < 0);
           livingTotalEl.classList.toggle("pos", liveRemain >= 0);
         }
-        var livePct = liveBudget > 0 ? Math.min(100,(liveSpent/liveBudget)*100) : (liveSpent>0?100:0);
-        var liveBarClass = liveSpent > liveBudget && liveBudget>0 ? "over" : (livePct>=85?"warn":"");
+        var liveBar = livingBarState(liveBudget, liveSpent, liveReceived);
+        var livePct = liveBar.pct, liveBarClass = liveBar.cls;
         var liveBarEl = livingHero.querySelector(".mp-progress");
         if(liveBarEl){
           liveBarEl.className = "mp-progress " + liveBarClass;
