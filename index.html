@@ -205,7 +205,13 @@
     margin-top:10px; padding:5px 8px; border-radius:8px; background:var(--surface-alt);
     font-size:.72rem; font-weight:800; color:var(--ink);
   }
+  .mp-lf-group[data-action]{ cursor:pointer; }
   .mp-lf-group b{ font-variant-numeric:tabular-nums; }
+  .mp-lf-group b.neg{ color:var(--negative); }
+  .mp-lf-caret{ font-style:normal; color:var(--muted); font-size:.66rem; }
+  .mp-lf-group.is-savings{ background:var(--accent-soft); color:var(--accent); }
+  .mp-lf-group.is-savings b{ color:var(--accent); }
+  .mp-lf-group.is-savings b.neg{ color:var(--negative); }
   .mp-lf-group + .mp-lf-row{ border-top:none; }
   .mp-lf-total-row{
     display:flex; justify-content:space-between; align-items:center; padding:4px 4px;
@@ -593,8 +599,10 @@
   // 고정내역을 따로 쓸 수 있는 탭들. 탭마다 목록이 완전히 분리된다.
   var FIXED_ITEM_TABS = ["personal", "living", "family"];
   var FIXED_ITEM_TAB_LABELS = { personal: "개인", living: "생활비", family: "저축" };
-  // 생활비 고정내역은 분류를 직접 적지 않고 아래 셋 중에서 고른다.
-  var LIVING_FIXED_CATEGORIES = ["정훈", "윤지", "기타"];
+  // 생활비 고정내역에서 고를 수 있는 분류.
+  var LIVING_FIXED_CATEGORIES = ["월급", "정훈", "윤지", "기타"];
+  // '저축'은 직접 입력하는 분류가 아니라, 월급에서 나머지를 모두 뺀 값을 보여주는 자리다.
+  var LIVING_SAVINGS_LABEL = "저축";
 
   function defaultState(){
     return {
@@ -1086,12 +1094,32 @@
         '<button type="button" class="mp-icon-btn" data-action="delete-lf-item" data-id="' + it.id + '">✕</button>' +
       '</div>';
   }
+  // 월급으로 들어온 돈에서 나머지(정훈/윤지/기타 등)를 모두 뺀 금액 = 저축
+  function livingFixedSalaryTotal(){
+    return getFixedItems().reduce(function(acc, it){
+      return it.category === "월급" ? acc + Number(it.amount || 0) : acc;
+    }, 0);
+  }
+  function livingFixedSpendTotal(){
+    return getFixedItems().reduce(function(acc, it){
+      return it.category === "월급" ? acc : acc + Number(it.amount || 0);
+    }, 0);
+  }
+  function livingFixedSavings(){
+    return livingFixedSalaryTotal() - livingFixedSpendTotal();
+  }
+  function fixedGroupHTML(key, sum, isOpen){
+    return '<div class="mp-lf-group" data-action="toggle-fixed-group" data-cat="' + esc(key) + '">' +
+        '<span>' + esc(key) + ' <i class="mp-lf-caret">' + (isOpen ? '▴' : '▾') + '</i></span>' +
+        '<b>' + won(sum) + '</b>' +
+      '</div>';
+  }
   function fixedItemsRowsHTML(){
     var items = getFixedItems();
     if(!isLivingFixedTab()) return items.map(fixedItemRowHTML).join("");
 
-    // 생활비 탭은 분류(정훈/윤지/기타)별로 묶어서 보여준다. 목록에 없는 분류나 빈 분류도
-    // 데이터를 건드리지 않고 그대로 자기 묶음으로 보여준다(빈 값은 "기타"로 묶는다).
+    // 생활비 탭은 분류별로 묶어서 보여준다. 목록에 없는 분류나 빈 분류도 데이터를 건드리지
+    // 않고 그대로 자기 묶음으로 보여준다(빈 값은 "기타"로 묶는다).
     var order = [];
     var buckets = {};
     items.forEach(function(it){
@@ -1105,28 +1133,45 @@
       if(ib < 0) ib = LIVING_FIXED_CATEGORIES.length;
       return ia - ib;
     });
-    return order.map(function(key){
+
+    // 맨 위 '저축'은 입력하는 분류가 아니라 계산된 값이라 펼칠 내용이 없다.
+    var savings = livingFixedSavings();
+    var html = '<div class="mp-lf-group is-savings" data-savings="1">' +
+        '<span>' + esc(LIVING_SAVINGS_LABEL) + '</span>' +
+        '<b class="' + (savings < 0 ? 'neg' : '') + '">' + won(savings) + '</b>' +
+      '</div>';
+
+    return html + order.map(function(key){
       var list = buckets[key];
       var sum = list.reduce(function(acc, it){ return acc + Number(it.amount || 0); }, 0);
-      return '<div class="mp-lf-group" data-cat="' + esc(key) + '"><span>' + esc(key) + '</span><b>' + won(sum) + '</b></div>' +
-        list.map(fixedItemRowHTML).join("");
+      var isOpen = !!uiFlags.fixedGroupOpen[key];
+      return fixedGroupHTML(key, sum, isOpen) + (isOpen ? list.map(fixedItemRowHTML).join("") : "");
     }).join("");
   }
   function updateFixedItemsTotal(){
     var panel = document.getElementById("mp-fixed-panel");
     if(!panel) return;
+    var living = isLivingFixedTab();
     var totalEl = panel.querySelector(".mp-lf-total-row b");
-    if(totalEl) totalEl.textContent = won(fixedItemsTotal());
-    // 분류별 묶음 합계도 같이 갱신한다. 목록을 통째로 다시 그리면 옆 칸으로 넘어가던
+    // 생활비 탭에서는 월급이 섞이면 단순 합계가 의미가 없어, 지출(월급 외)만 더해서 보여준다.
+    if(totalEl) totalEl.textContent = won(living ? livingFixedSpendTotal() : fixedItemsTotal());
+    // 묶음 합계와 '저축'도 같이 갱신한다. 목록을 통째로 다시 그리면 옆 칸으로 넘어가던
     // 포커스가 빠지기 때문에, 숫자만 바꿔 끼운다.
     var items = getFixedItems();
     panel.querySelectorAll(".mp-lf-group").forEach(function(g){
+      var b = g.querySelector("b");
+      if(!b) return;
+      if(g.dataset.savings){
+        var savings = livingFixedSavings();
+        b.textContent = won(savings);
+        b.classList.toggle("neg", savings < 0);
+        return;
+      }
       var key = g.dataset.cat;
       var sum = items.reduce(function(acc, it){
         return ((it.category || "기타") === key) ? acc + Number(it.amount || 0) : acc;
       }, 0);
-      var b = g.querySelector("b");
-      if(b) b.textContent = won(sum);
+      b.textContent = won(sum);
     });
   }
   function renderFixedItemsPanel(){
@@ -1144,7 +1189,7 @@
           '</div>' +
           '<form class="mp-lf-add" data-action="add-fixed-item">' +
             (isLivingFixedTab() ?
-              '<select name="category">' + livingCategoryOptions(LIVING_FIXED_CATEGORIES[0]) + '</select>' :
+              '<select name="category">' + livingCategoryOptions(uiFlags.lastFixedCategory || LIVING_FIXED_CATEGORIES[0]) + '</select>' :
               '<input type="text" name="category" placeholder="분류">') +
             '<input type="text" name="name" placeholder="내용" required>' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
@@ -1154,7 +1199,8 @@
           '<div class="mp-lf-list">' +
             (rows ? rows : '<div class="mp-empty">입력된 고정내역이 없어요</div>') +
           '</div>' +
-          '<div class="mp-lf-total-row"><span>합계</span><b>' + won(fixedItemsTotal()) + '</b></div>' +
+          '<div class="mp-lf-total-row"><span>' + (isLivingFixedTab() ? '고정지출 합계' : '합계') + '</span>' +
+            '<b>' + won(isLivingFixedTab() ? livingFixedSpendTotal() : fixedItemsTotal()) + '</b></div>' +
         '</div>' +
       '</div>';
   }
@@ -1467,7 +1513,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"" };
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
@@ -2349,6 +2395,14 @@
 
     if(action === "toggle-fixed-items"){
       uiFlags.showFixedItems = !uiFlags.showFixedItems;
+      // 열 때는 항상 모든 분류가 접힌 상태로 시작한다.
+      if(uiFlags.showFixedItems) uiFlags.fixedGroupOpen = {};
+      renderFixedItemsPanel();
+      return;
+    }
+    if(action === "toggle-fixed-group"){
+      var grpKey = el.dataset.cat;
+      uiFlags.fixedGroupOpen[grpKey] = !uiFlags.fixedGroupOpen[grpKey];
       renderFixedItemsPanel();
       return;
     }
@@ -2953,7 +3007,10 @@
         saveState();
         // 분류가 바뀌면 묶이는 위치 자체가 달라지므로 목록을 다시 그린다(드롭다운을 고른
         // 직후라 입력 중이 아니다). 금액은 합계 숫자만 갈아끼운다.
-        if(action === "edit-lf-category" && isLivingFixedTab()) renderFixedItemsPanel();
+        if(action === "edit-lf-category" && isLivingFixedTab()){
+          uiFlags.fixedGroupOpen[el.value || "기타"] = true;
+          renderFixedItemsPanel();
+        }
         else if(action === "edit-lf-amount") updateFixedItemsTotal();
       }
       return;
@@ -3128,13 +3185,19 @@
       var lfNewName = (fd.get("name")||"").trim();
       var lfNewAmount = Math.abs(parseMoneyValue(fd.get("amount")));
       if(!lfNewName && lfNewAmount <= 0) return;
+      var lfNewCat = (fd.get("category")||"").trim();
       getFixedItems().push({
         id: uid(),
-        category: (fd.get("category")||"").trim(),
+        category: lfNewCat,
         name: lfNewName,
         amount: lfNewAmount,
         note: (fd.get("note")||"").trim()
       });
+      // 다음에 또 넣을 때 같은 분류가 그대로 골라져 있도록 기억해 둔다.
+      // 분류를 고르는 건 생활비 탭뿐이라, 다른 탭에서 적은 값이 섞이지 않게 막는다.
+      if(isLivingFixedTab()) uiFlags.lastFixedCategory = lfNewCat;
+      // 방금 넣은 항목이 접힌 묶음 속으로 사라지지 않도록 그 분류는 펼쳐준다.
+      uiFlags.fixedGroupOpen[lfNewCat || "기타"] = true;
       saveState();
       renderFixedItemsPanel();
       return;
