@@ -176,19 +176,23 @@
     display:grid; grid-template-columns:50px 1fr 86px 44px auto; gap:5px; margin-top:4px; align-items:center;
   }
   .mp-lf-add > *{ min-width:0; }
-  .mp-lf-add input, .mp-lf-add select{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; width:100%; }
+  .mp-lf-add input[type="text"], .mp-lf-add select{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; width:100%; }
   .mp-lf-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
   .mp-lf-list{ display:flex; flex-direction:column; }
   .mp-lf-row{
     display:grid; grid-template-columns:50px 1fr 86px 44px 22px; gap:5px; align-items:center;
-    padding:9px 0; border-top:1px solid var(--line); font-size:.85rem;
+    padding:4px 0; border-top:1px solid var(--line); font-size:.85rem;
   }
   .mp-lf-row > *{ min-width:0; }
-  .mp-lf-row input{
+  /* 전역 input 규칙(회색 배경 + 테두리 + 38px 높이)이 뒤에 있어서 그대로 두면 그게 이긴다.
+     입력된 내역은 칸 없이 글자만 보여야 해서 선택자 우선순위를 올려 덮어쓴다. */
+  .mp-lf-row input[type="text"]{
     border:none; background:none; padding:2px 0; font-size:.78rem; font-family:var(--font-ui);
     color:var(--ink); height:auto; border-radius:4px; width:100%;
   }
-  .mp-lf-row input:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
+  .mp-lf-row input[type="text"]:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
+  /* 비어있는 칸의 안내글(분류/비고)이 금액 옆에 붙어 보여 지저분해서 흐리게 둔다. */
+  .mp-lf-row input[type="text"]::placeholder{ opacity:.4; }
   .mp-lf-row .mp-lf-cat-edit{ color:var(--muted); font-size:.72rem; overflow:hidden; text-overflow:ellipsis; }
   .mp-lf-row .mp-lf-name-edit{ overflow:hidden; text-overflow:ellipsis; }
   .mp-lf-row .mp-lf-amt-edit{ font-variant-numeric:tabular-nums; font-weight:650; text-align:right; }
