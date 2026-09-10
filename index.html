@@ -160,29 +160,40 @@
   .mp-calc-key.equals{ background:var(--accent); color:#fff; }
   .mp-calc-key.zero{ grid-column:span 2; }
 
-  .mp-lf-table-wrap{ border:1px solid var(--line); border-radius:var(--radius-md); overflow:hidden; }
-  /* 좁은 화면에서도 삭제(✕) 칸까지 한 화면에 들어오도록 폭을 비율로 고정한다. */
-  .mp-lf-table{ width:100%; border-collapse:collapse; font-size:.72rem; table-layout:fixed; }
-  .mp-lf-table th{
-    background:var(--surface-alt); color:var(--muted); font-weight:700; text-align:left;
-    padding:6px 4px; border-bottom:1px solid var(--line); white-space:nowrap;
+  /* 고정내역 팝업: 화면 가운데에 뜨는 형태 */
+  .mp-center-overlay{
+    position:fixed; inset:0; z-index:20; background:rgba(24,28,34,.4);
+    display:flex; align-items:center; justify-content:center; padding:16px;
+    animation: mp-reveal .18s ease;
   }
-  .mp-lf-table th:nth-child(3){ text-align:right; }
-  .mp-lf-table th:nth-child(1), .mp-lf-table td:nth-child(1){ width:19%; }
-  .mp-lf-table th:nth-child(2), .mp-lf-table td:nth-child(2){ width:26%; }
-  .mp-lf-table th:nth-child(3), .mp-lf-table td:nth-child(3){ width:25%; }
-  .mp-lf-table th:nth-child(4), .mp-lf-table td:nth-child(4){ width:22%; }
-  .mp-lf-table th:nth-child(5), .mp-lf-table td:nth-child(5){ width:8%; padding-left:0; padding-right:0; }
-  .mp-lf-table td{ padding:1px 3px; border-bottom:1px solid var(--line); vertical-align:middle; background:var(--surface); }
-  .mp-lf-input{
-    width:100%; border:none; background:none; padding:6px 2px; font-size:.72rem; color:var(--ink);
-    font-family:var(--font-ui);
+  .mp-center-modal{
+    background:var(--surface); width:100%; max-width:440px; border-radius:20px;
+    padding:16px; display:flex; flex-direction:column; gap:8px;
+    max-height:82vh; overflow-y:auto;
   }
-  .mp-lf-amount{ text-align:right; }
-  .mp-lf-del{
-    background:none; border:none; color:var(--muted); font-size:.82rem; cursor:pointer;
-    padding:6px 0; width:100%; line-height:1;
+  /* 입력 형식은 생활비 지출 내역(폼 + 목록)과 같은 모양을 따른다. */
+  .mp-lf-add{
+    display:grid; grid-template-columns:54px 1fr 74px 50px auto; gap:6px; margin-top:4px; align-items:center;
   }
+  .mp-lf-add > *{ min-width:0; }
+  .mp-lf-add input{ padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box; width:100%; }
+  .mp-lf-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
+  .mp-lf-list{ display:flex; flex-direction:column; }
+  .mp-lf-row{
+    display:grid; grid-template-columns:54px 1fr 74px 50px 22px; gap:6px; align-items:center;
+    padding:9px 0; border-top:1px solid var(--line); font-size:.85rem;
+  }
+  .mp-lf-row > *{ min-width:0; }
+  .mp-lf-row input{
+    border:none; background:none; padding:2px 0; font-size:.78rem; font-family:var(--font-ui);
+    color:var(--ink); height:auto; border-radius:4px; width:100%;
+  }
+  .mp-lf-row input:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
+  .mp-lf-row .mp-lf-cat-edit{ color:var(--muted); font-size:.72rem; overflow:hidden; text-overflow:ellipsis; }
+  .mp-lf-row .mp-lf-name-edit{ overflow:hidden; text-overflow:ellipsis; }
+  .mp-lf-row .mp-lf-amt-edit{ font-variant-numeric:tabular-nums; font-weight:650; text-align:right; }
+  .mp-lf-row .mp-lf-note-edit{ color:var(--muted); font-size:.68rem; overflow:hidden; text-overflow:ellipsis; }
+  .mp-lf-row .mp-icon-btn{ padding:2px; justify-self:end; }
   .mp-lf-total-row{
     display:flex; justify-content:space-between; align-items:center; padding:4px 4px;
     font-size:.9rem; font-weight:800;
@@ -1039,13 +1050,13 @@
   }
   function fixedItemsRowsHTML(){
     return getFixedItems().map(function(it){
-      return '<tr class="mp-lf-row" data-id="' + it.id + '">' +
-          '<td><input type="text" class="mp-lf-input" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류"></td>' +
-          '<td><input type="text" class="mp-lf-input" data-action="edit-lf-name" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="내용"></td>' +
-          '<td><input type="text" inputmode="numeric" class="mp-money mp-lf-input mp-lf-amount" data-action="edit-lf-amount" data-id="' + it.id + '" value="' + (it.amount ? formatNumberString(it.amount) : "") + '" placeholder="0"></td>' +
-          '<td><input type="text" class="mp-lf-input" data-action="edit-lf-note" data-id="' + it.id + '" value="' + esc(it.note || "") + '" placeholder="비고"></td>' +
-          '<td><button type="button" class="mp-lf-del" data-action="delete-lf-item" data-id="' + it.id + '">✕</button></td>' +
-        '</tr>';
+      return '<div class="mp-lf-row" data-id="' + it.id + '">' +
+          '<input type="text" class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류">' +
+          '<input type="text" class="mp-lf-name-edit" data-action="edit-lf-name" data-id="' + it.id + '" value="' + esc(it.name || "") + '" placeholder="내용">' +
+          '<input type="text" inputmode="numeric" class="mp-money mp-lf-amt-edit" data-action="edit-lf-amount" data-id="' + it.id + '" value="' + (it.amount ? formatNumberString(it.amount) : "") + '" placeholder="0">' +
+          '<input type="text" class="mp-lf-note-edit" data-action="edit-lf-note" data-id="' + it.id + '" value="' + esc(it.note || "") + '" placeholder="비고">' +
+          '<button type="button" class="mp-icon-btn" data-action="delete-lf-item" data-id="' + it.id + '">✕</button>' +
+        '</div>';
     }).join("");
   }
   function updateFixedItemsTotal(){
@@ -1057,21 +1068,25 @@
     if(!panel) return;
     if(!uiFlags.showFixedItems){ panel.innerHTML = ""; return; }
     var tabLabel = FIXED_ITEM_TAB_LABELS[state.activeTab] || "";
+    var rows = fixedItemsRowsHTML();
     panel.innerHTML =
-      '<div class="mp-sync-overlay" data-action="close-fixed-items">' +
-        '<div class="mp-sync-modal" data-action="noop-stop">' +
+      '<div class="mp-center-overlay" data-action="close-fixed-items">' +
+        '<div class="mp-center-modal" data-action="noop-stop">' +
           '<div class="mp-sync-head">' +
             '<div class="mp-sync-title">' + esc(tabLabel) + ' 고정내역</div>' +
             '<button type="button" class="mp-sync-close" data-action="close-fixed-items">✕</button>' +
           '</div>' +
-          '<div class="mp-lf-table-wrap">' +
-            '<table class="mp-lf-table">' +
-              '<thead><tr><th>분류</th><th>내용</th><th>금액</th><th>비고</th><th></th></tr></thead>' +
-              '<tbody>' + fixedItemsRowsHTML() + '</tbody>' +
-            '</table>' +
+          '<form class="mp-lf-add" data-action="add-fixed-item">' +
+            '<input type="text" name="category" placeholder="분류">' +
+            '<input type="text" name="name" placeholder="내용" required>' +
+            '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
+            '<input type="text" name="note" placeholder="비고">' +
+            '<button class="mp-btn small" type="submit">추가</button>' +
+          '</form>' +
+          '<div class="mp-lf-list">' +
+            (rows ? rows : '<div class="mp-empty">입력된 고정내역이 없어요</div>') +
           '</div>' +
           '<div class="mp-lf-total-row"><span>합계</span><b>' + won(fixedItemsTotal()) + '</b></div>' +
-          '<button type="button" class="mp-btn ghost block" data-action="add-lf-item">+ 항목 추가</button>' +
         '</div>' +
       '</div>';
   }
@@ -2268,12 +2283,6 @@
       renderFixedItemsPanel();
       return;
     }
-    if(action === "add-lf-item"){
-      getFixedItems().push({ id: uid(), category: "", name: "", amount: 0, note: "" });
-      saveState();
-      renderFixedItemsPanel();
-      return;
-    }
     if(action === "delete-lf-item"){
       var lfList = getFixedItems();
       var lfIdx = lfList.findIndex(function(it){ return it.id === el.dataset.id; });
@@ -3038,6 +3047,22 @@
       scrollRowIntoView(svNewId);
       return;
     }
+    if(action === "add-fixed-item"){
+      var lfNewName = (fd.get("name")||"").trim();
+      var lfNewAmount = Math.abs(parseMoneyValue(fd.get("amount")));
+      if(!lfNewName && lfNewAmount <= 0) return;
+      getFixedItems().push({
+        id: uid(),
+        category: (fd.get("category")||"").trim(),
+        name: lfNewName,
+        amount: lfNewAmount,
+        note: (fd.get("note")||"").trim()
+      });
+      saveState();
+      renderFixedItemsPanel();
+      return;
+    }
+
     if(action === "add-living-tx"){
       var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
