@@ -369,18 +369,45 @@
     padding:10px 0; border-bottom:1px solid var(--line);
   }
   .mp-sv-row:last-child{ border-bottom:none; }
-  .mp-sv-label{ font-size:.85rem; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .mp-sv-label{ font-size:.9rem; font-weight:600; color:var(--ink); white-space:nowrap; }
   .mp-sv-value{
-    display:flex; align-items:center; gap:2px; height:24px;
-    font-size:.85rem; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;
+    display:flex; align-items:center; gap:3px; height:36px;
+    font-size:.9rem; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;
   }
   .mp-sv-value i{ font-style:normal; }
+  /* 금액 입력칸은 손가락으로 누르기 쉽도록 충분히 크게 잡는다 */
   .mp-sv-input[type="text"]{
-    border:none; background:none; padding:0; height:24px; border-radius:4px;
-    font-family:var(--font-ui); font-size:.85rem; font-weight:700; color:var(--ink);
+    border:none; background:var(--surface-alt); padding:0 10px; height:36px; min-width:128px;
+    border-radius:10px;
+    font-family:var(--font-ui); font-size:.9rem; font-weight:700; color:var(--ink);
     text-align:right; font-variant-numeric:tabular-nums;
   }
-  .mp-sv-input[type="text"]:focus{ background:var(--surface-alt); outline:none; padding:0 4px; }
+  .mp-sv-input[type="text"]:focus{ outline:2px solid var(--accent-soft); outline-offset:-2px; }
+  /* 사용 금액 줄: 눌러서 분류별 내역 펼치기 */
+  .mp-sv-row[data-action]{ cursor:pointer; }
+  .mp-sv-caret{ font-style:normal; color:var(--muted); font-size:.7rem; margin-left:4px; }
+  .mp-sv-used-detail{ display:flex; flex-direction:column; padding:2px 0 8px; }
+  .mp-sv-group{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    margin-top:8px; padding:5px 8px; border-radius:8px; background:var(--surface-alt);
+    font-size:.72rem; font-weight:800; color:var(--ink);
+  }
+  .mp-sv-group b{ font-variant-numeric:tabular-nums; }
+  .mp-sv-txrow{
+    display:grid; grid-template-columns:56px 68px 1fr 62px 20px; gap:4px; align-items:center;
+    padding:5px 0; border-bottom:1px solid var(--line);
+  }
+  .mp-sv-txrow > *{ min-width:0; }
+  .mp-sv-txrow input[type="text"], .mp-sv-txrow select{
+    border:none; background:none; padding:2px 0; height:auto; width:100%; border-radius:4px;
+    font-family:var(--font-ui); font-size:.74rem; color:var(--ink);
+  }
+  .mp-sv-txrow input[type="text"]:focus, .mp-sv-txrow select:focus{ background:var(--surface-alt); outline:none; }
+  .mp-sv-txrow select{ -webkit-appearance:none; appearance:none; color:var(--muted); font-size:.7rem; }
+  .mp-sv-txrow .mp-sv-tx-date{ color:var(--muted); font-size:.7rem; font-variant-numeric:tabular-nums; }
+  .mp-sv-txrow .mp-sv-tx-memo{ overflow:hidden; text-overflow:ellipsis; }
+  .mp-sv-txrow .mp-sv-tx-amt{ font-weight:650; text-align:right; font-variant-numeric:tabular-nums; }
+  .mp-sv-txrow .mp-icon-btn{ padding:2px; justify-self:end; }
   .mp-balance-row{ display:flex; align-items:flex-end; gap:10px; width:100%; }
   .mp-balance-field{ display:flex; flex-direction:column; flex:1; min-width:0; }
   /* 생활비 탭 기준금액 입력칸은 전역 input 규칙 때문에 높이가 38px로 고정되는데,
@@ -526,10 +553,10 @@
   }
   .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
   .mp-savings-tx-add{
-    display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:6px; margin-top:10px; align-items:center;
+    display:grid; grid-template-columns:62px 88px 1fr 62px auto; gap:5px; margin-top:10px; align-items:center;
   }
   .mp-savings-tx-add > *{ min-width:0; }
-  .mp-savings-tx-add input{ padding:0 6px; font-size:.74rem; height:32px; box-sizing:border-box; width:100%; }
+  .mp-savings-tx-add input[type="text"], .mp-savings-tx-add select{ padding:0 6px; font-size:.74rem; height:32px; box-sizing:border-box; width:100%; }
   .mp-savings-tx-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
 
   .mp-empty{ color:var(--muted); font-size:.82rem; padding:10px 0; text-align:center; }
@@ -630,6 +657,10 @@
   var FIXED_ITEM_TAB_LABELS = { personal: "개인", living: "생활비", family: "저축" };
   // 생활비 고정내역에서 고를 수 있는 분류.
   var LIVING_FIXED_CATEGORIES = ["월급", "정훈", "윤지", "기타"];
+  // 저축 탭에서 쓰는 분류 (사용 내역, 고정내역 모두 같은 목록)
+  var SAVINGS_CATEGORIES = ["가족행사", "일반"];
+  // 고정내역에서 분류를 직접 적지 않고 고르는 탭들
+  var FIXED_CATEGORY_OPTIONS = { living: LIVING_FIXED_CATEGORIES, family: SAVINGS_CATEGORIES };
   // '저축'은 직접 입력하는 분류가 아니라, 월급에서 나머지를 모두 뺀 값을 보여주는 자리다.
   var LIVING_SAVINGS_LABEL = "저축";
 
@@ -1101,18 +1132,20 @@
     return getFixedItems().reduce(function(s, it){ return s + Number(it.amount || 0); }, 0);
   }
   function isLivingFixedTab(){ return state.activeTab === "living"; }
+  // 이 탭의 고정내역 분류 선택지. 없으면(개인 탭) 분류를 직접 적는다.
+  function fixedCategoryList(){ return FIXED_CATEGORY_OPTIONS[state.activeTab] || null; }
   // 저장된 분류가 목록에 없는 값(예전에 직접 적어둔 값)이면 그 값도 선택지에 넣어준다.
-  function livingCategoryOptions(selected){
-    var list = LIVING_FIXED_CATEGORIES.slice();
+  function fixedCategoryOptions(selected){
+    var list = (fixedCategoryList() || []).slice();
     if(selected && list.indexOf(selected) < 0) list.unshift(selected);
     return list.map(function(c){
       return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
     }).join("");
   }
   function fixedItemRowHTML(it){
-    var catField = isLivingFixedTab() ?
+    var catField = fixedCategoryList() ?
       '<select class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '">' +
-        livingCategoryOptions(it.category || "") +
+        fixedCategoryOptions(it.category || "") +
       '</select>' :
       '<input type="text" class="mp-lf-cat-edit" data-action="edit-lf-category" data-id="' + it.id + '" value="' + esc(it.category || "") + '" placeholder="분류">';
     return '<div class="mp-lf-row" data-id="' + it.id + '">' +
@@ -1208,6 +1241,10 @@
     if(!panel) return;
     if(!uiFlags.showFixedItems){ panel.innerHTML = ""; return; }
     var tabLabel = FIXED_ITEM_TAB_LABELS[state.activeTab] || "";
+    var fixedCatList = fixedCategoryList();
+    // 다른 탭에서 고른 분류가 섞이지 않도록, 이 탭 목록에 있는 값일 때만 기본값으로 쓴다.
+    var fixedDefaultCat = (fixedCatList && fixedCatList.indexOf(uiFlags.lastFixedCategory) >= 0)
+      ? uiFlags.lastFixedCategory : (fixedCatList ? fixedCatList[0] : "");
     var rows = fixedItemsRowsHTML();
     panel.innerHTML =
       '<div class="mp-center-overlay" data-action="close-fixed-items">' +
@@ -1217,8 +1254,8 @@
             '<button type="button" class="mp-sync-close" data-action="close-fixed-items">✕</button>' +
           '</div>' +
           '<form class="mp-lf-add" data-action="add-fixed-item">' +
-            (isLivingFixedTab() ?
-              '<select name="category">' + livingCategoryOptions(uiFlags.lastFixedCategory || LIVING_FIXED_CATEGORIES[0]) + '</select>' :
+            (fixedCatList ?
+              '<select name="category">' + fixedCategoryOptions(fixedDefaultCat) + '</select>' :
               '<input type="text" name="category" placeholder="분류">') +
             '<input type="text" name="name" placeholder="내용" required>' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
@@ -1413,6 +1450,16 @@
       if(netB) netB.textContent = won(savingsNet(sm)).replace("원","");
       var usedB = card.querySelector(".mp-sv-used");
       if(usedB) usedB.textContent = won(savingsTxTotal(sm)).replace("원","");
+      // 펼쳐져 있는 분류별 소계도 같이 맞춰준다.
+      card.querySelectorAll(".mp-sv-group").forEach(function(g){
+        var b = g.querySelector("b");
+        if(!b) return;
+        var key = g.dataset.cat;
+        var sum = (sm.tx || []).reduce(function(acc, t){
+          return savingsTxCategory(t) === key ? acc + Number(t.amount||0) : acc;
+        }, 0);
+        b.textContent = won(sum);
+      });
     }
   }
   function commitPendingPersonalFields(){
@@ -1552,7 +1599,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", savingsUsedOpen:false, lastSavingsTxCategory:"" };
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
@@ -1945,6 +1992,48 @@
         '</span>' +
       '</div>';
   }
+  // 저장된 분류가 목록에 없으면(예전 내역 등) 그 값도 선택지에 넣어 그대로 보여준다.
+  function savingsCategoryOptions(selected){
+    var list = SAVINGS_CATEGORIES.slice();
+    if(selected && list.indexOf(selected) < 0) list.unshift(selected);
+    return list.map(function(c){
+      return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
+    }).join("");
+  }
+  function savingsTxCategory(t){ return t.category || SAVINGS_CATEGORIES[SAVINGS_CATEGORIES.length - 1]; }
+  function savingsTxRowHTML(t){
+    return '<div class="mp-sv-txrow" data-id="' + t.id + '">' +
+        '<select data-action="edit-savings-tx-category" data-id="' + t.id + '">' + savingsCategoryOptions(savingsTxCategory(t)) + '</select>' +
+        '<input type="text" inputmode="numeric" class="mp-date-input mp-sv-tx-date" data-action="edit-savings-tx-date" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
+        '<input type="text" class="mp-sv-tx-memo" data-action="edit-savings-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="내용">' +
+        '<input type="text" inputmode="numeric" class="mp-money mp-sv-tx-amt" data-action="edit-savings-tx-amount" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
+        '<button type="button" class="mp-icon-btn" data-action="delete-savings-tx" data-id="' + t.id + '">✕</button>' +
+      '</div>';
+  }
+  // 사용 내역을 분류별로 묶고, 묶음마다 소계를 보여준다.
+  function savingsUsedDetailHTML(sm){
+    var list = (sm.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    if(!list.length) return '<div class="mp-sv-used-detail"><div class="mp-empty">이번 달 사용 내역이 없어요</div></div>';
+    var order = [];
+    var buckets = {};
+    list.forEach(function(t){
+      var key = savingsTxCategory(t);
+      if(!buckets[key]){ buckets[key] = []; order.push(key); }
+      buckets[key].push(t);
+    });
+    order.sort(function(a, b){
+      var ia = SAVINGS_CATEGORIES.indexOf(a), ib = SAVINGS_CATEGORIES.indexOf(b);
+      if(ia < 0) ia = SAVINGS_CATEGORIES.length;
+      if(ib < 0) ib = SAVINGS_CATEGORIES.length;
+      return ia - ib;
+    });
+    return '<div class="mp-sv-used-detail">' + order.map(function(key){
+      var rows = buckets[key];
+      var sum = rows.reduce(function(acc, t){ return acc + Number(t.amount||0); }, 0);
+      return '<div class="mp-sv-group" data-cat="' + esc(key) + '"><span>' + esc(key) + '</span><b>' + won(sum) + '</b></div>' +
+        rows.map(savingsTxRowHTML).join("");
+    }).join("") + '</div>';
+  }
   function savingsReadRowHTML(label, value, cls){
     return '<div class="mp-sv-row">' +
         '<span class="mp-sv-label">' + label + '</span>' +
@@ -1985,12 +2074,17 @@
             savingsFieldRowHTML('저축금액', 'set-savings-amount', sm.amount||0) +
             savingsFieldRowHTML('결산이자', 'set-savings-interest', sm.interest||0) +
             savingsFieldRowHTML('집안행사비용', 'set-savings-event', sm.eventCost||0) +
-            savingsReadRowHTML('사용 금액', txTotal, 'mp-sv-used') +
+            '<div class="mp-sv-row" data-action="toggle-savings-used">' +
+              '<span class="mp-sv-label">사용 금액<i class="mp-sv-caret">' + (uiFlags.savingsUsedOpen ? '▴' : '▾') + '</i></span>' +
+              '<span class="mp-sv-value"><span class="mp-sv-used">' + won(txTotal).replace("원","") + '</span><i>원</i></span>' +
+            '</div>' +
+            (uiFlags.savingsUsedOpen ? savingsUsedDetailHTML(sm) : '') +
             savingsReadRowHTML('이번 달 순저축', net, 'mp-sv-net') +
           '</div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           '<form class="mp-savings-tx-add" data-action="add-savings-tx">' +
+            '<select name="category">' + savingsCategoryOptions(uiFlags.lastSavingsTxCategory || SAVINGS_CATEGORIES[0]) + '</select>' +
             '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
             '<input type="text" name="memo" placeholder="사용 내용">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
@@ -2001,24 +2095,7 @@
     }
     html += '</div>';
 
-    if(expanded){
-      var sm2 = getSavingsMonth(mk);
-      var txSorted = (sm2.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
-      html += '<section class="mp-card mp-log-card">' +
-        (txSorted.length ?
-        '<div class="mp-log">' +
-          txSorted.map(function(t){
-            return '<div class="mp-tx-row mp-tx-row-editable" data-id="' + t.id + '">' +
-              '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-savings-tx-date" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
-              '<input type="text" class="mp-tx-memo-edit" data-action="edit-savings-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="내용">' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit expense" data-action="edit-savings-tx-amount" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
-              '<button class="mp-icon-btn" data-action="delete-savings-tx" data-id="' + t.id + '">✕</button>' +
-            '</div>';
-          }).join("") +
-        '</div>'
-        : '<div class="mp-empty">이번 달 사용 내역이 없어요</div>') +
-      '</section>';
-    } else {
+    if(!expanded){
       html += '<div class="mp-accounts-grid mp-savings-grid">';
       for(var m = 1; m <= 12; m++){
         var mmk = year + "-" + String(m).padStart(2,"0");
@@ -2578,6 +2655,11 @@
       setTimeout(function(){ el.textContent = original; }, 1200);
       return;
     }
+    if(action === "toggle-savings-used"){
+      uiFlags.savingsUsedOpen = !uiFlags.savingsUsedOpen;
+      render();
+      return;
+    }
     if(action === "toggle-savings-month"){
       commitPendingSavingsFields();
       if(el.dataset.id){
@@ -2961,6 +3043,17 @@
       }
       return;
     }
+    if(action === "edit-savings-tx-category"){
+      var svmC = getSavingsMonth(state.currentMonth);
+      var svC = (svmC.tx||[]).find(function(t){ return t.id === el.dataset.id; });
+      if(svC){
+        svC.category = el.value;
+        uiFlags.lastSavingsTxCategory = el.value;
+        saveState();
+        render();
+      }
+      return;
+    }
     if(action === "edit-savings-tx-memo"){
       var svm4 = getSavingsMonth(state.currentMonth);
       var svM = (svm4.tx||[]).find(function(t){ return t.id === el.dataset.id; });
@@ -3051,7 +3144,7 @@
         saveState();
         // 분류가 바뀌면 묶이는 위치 자체가 달라지므로 목록을 다시 그린다(드롭다운을 고른
         // 직후라 입력 중이 아니다). 금액은 합계 숫자만 갈아끼운다.
-        if(action === "edit-lf-category" && isLivingFixedTab()){
+        if(action === "edit-lf-category" && fixedCategoryList()){
           uiFlags.fixedGroupOpen[el.value || "기타"] = true;
           renderFixedItemsPanel();
         }
@@ -3219,7 +3312,11 @@
       if(svAmt <= 0) return;
       var svm = getSavingsMonth(state.currentMonth);
       var svNewId = uid();
-      svm.tx.push({ id: svNewId, date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, ts: Date.now() });
+      var svCat = (fd.get("category")||"").trim() || SAVINGS_CATEGORIES[0];
+      svm.tx.push({ id: svNewId, date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, category: svCat, ts: Date.now() });
+      // 다음에 또 넣을 때 같은 분류가 그대로 골라져 있도록 기억하고, 내역은 펼쳐서 보여준다.
+      uiFlags.lastSavingsTxCategory = svCat;
+      uiFlags.savingsUsedOpen = true;
       form.reset();
       saveState(); render();
       scrollRowIntoView(svNewId);
@@ -3238,8 +3335,8 @@
         note: (fd.get("note")||"").trim()
       });
       // 다음에 또 넣을 때 같은 분류가 그대로 골라져 있도록 기억해 둔다.
-      // 분류를 고르는 건 생활비 탭뿐이라, 다른 탭에서 적은 값이 섞이지 않게 막는다.
-      if(isLivingFixedTab()) uiFlags.lastFixedCategory = lfNewCat;
+      // 분류를 직접 적는 탭(개인)의 값이 섞이지 않도록 선택지가 있는 탭에서만 기억한다.
+      if(fixedCategoryList()) uiFlags.lastFixedCategory = lfNewCat;
       // 방금 넣은 항목이 접힌 묶음 속으로 사라지지 않도록 그 분류는 펼쳐준다.
       uiFlags.fixedGroupOpen[lfNewCat || "기타"] = true;
       saveState();
