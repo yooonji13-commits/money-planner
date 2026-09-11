@@ -360,6 +360,27 @@
   .mp-balance-input-row{ display:flex; align-items:center; gap:3px; min-width:0; width:100%; }
   .mp-balance-input-row .mp-balance-edit, .mp-balance-input-row .mp-loan-input{ flex:0 1 auto; min-width:0; width:auto; }
   .mp-balance-suffix{ font-size:1.05rem; font-weight:700; color:var(--ink); flex-shrink:0; }
+
+  /* 저축 탭 입력 줄: 라벨은 왼쪽, 금액은 오른쪽. 줄 간격·글자 크기·색을 모두 통일한다.
+     전역 input 규칙(회색 배경 + 테두리 + 38px)이 뒤에 있어 선택자 우선순위를 올려 덮어쓴다. */
+  .mp-sv-fields{ display:flex; flex-direction:column; width:100%; margin-top:10px; }
+  .mp-sv-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 0; border-bottom:1px solid var(--line);
+  }
+  .mp-sv-row:last-child{ border-bottom:none; }
+  .mp-sv-label{ font-size:.85rem; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .mp-sv-value{
+    display:flex; align-items:center; gap:2px; height:24px;
+    font-size:.85rem; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;
+  }
+  .mp-sv-value i{ font-style:normal; }
+  .mp-sv-input[type="text"]{
+    border:none; background:none; padding:0; height:24px; border-radius:4px;
+    font-family:var(--font-ui); font-size:.85rem; font-weight:700; color:var(--ink);
+    text-align:right; font-variant-numeric:tabular-nums;
+  }
+  .mp-sv-input[type="text"]:focus{ background:var(--surface-alt); outline:none; padding:0 4px; }
   .mp-balance-row{ display:flex; align-items:flex-end; gap:10px; width:100%; }
   .mp-balance-field{ display:flex; flex-direction:column; flex:1; min-width:0; }
   /* 생활비 탭 기준금액 입력칸은 전역 input 규칙 때문에 높이가 38px로 고정되는데,
@@ -1388,12 +1409,10 @@
     }
     var card = document.querySelector("#mp-main .mp-account.is-expanded");
     if(card){
-      var netB = card.querySelector(".mp-loan-stats b");
-      if(netB){
-        var net = savingsNet(sm);
-        netB.textContent = won(net);
-        netB.style.color = net < 0 ? "var(--negative)" : "";
-      }
+      var netB = card.querySelector(".mp-sv-net");
+      if(netB) netB.textContent = won(savingsNet(sm)).replace("원","");
+      var usedB = card.querySelector(".mp-sv-used");
+      if(usedB) usedB.textContent = won(savingsTxTotal(sm)).replace("원","");
     }
   }
   function commitPendingPersonalFields(){
@@ -1917,6 +1936,21 @@
   }
 
   // ---------- 가족 탭 ----------
+  function savingsFieldRowHTML(label, action, value){
+    return '<div class="mp-sv-row">' +
+        '<span class="mp-sv-label">' + label + '</span>' +
+        '<span class="mp-sv-value">' +
+          '<input type="text" inputmode="numeric" class="mp-money mp-sv-input" data-action="' + action + '" value="' + formatNumberString(value) + '" placeholder="0" style="width:' + moneyChWidth(value, false) + ';">' +
+          '<i>원</i>' +
+        '</span>' +
+      '</div>';
+  }
+  function savingsReadRowHTML(label, value, cls){
+    return '<div class="mp-sv-row">' +
+        '<span class="mp-sv-label">' + label + '</span>' +
+        '<span class="mp-sv-value"><span class="' + cls + '">' + won(value).replace("원","") + '</span><i>원</i></span>' +
+      '</div>';
+  }
   function renderSavings(){
     var mk = state.currentMonth;
     var year = parseInt(mk.slice(0,4), 10);
@@ -1947,15 +1981,13 @@
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + monthNum + '월</div>' +
           '</div>' +
-          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">저축금액</div>' +
-            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-amount" value="' + formatNumberString(sm.amount||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.amount||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
-          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">결산이자</div>' +
-            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-interest" value="' + formatNumberString(sm.interest||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.interest||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
-          '<div class="mp-detail-field" style="margin-top:10px;width:100%;"><div class="mp-label">집안행사비용</div>' +
-            '<div class="mp-balance-input-row"><input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-savings-event" value="' + formatNumberString(sm.eventCost||0) + '" placeholder="0" style="width:' + moneyChWidth(sm.eventCost||0, true) + ';"><span class="mp-balance-suffix" style="font-size:.85rem;">원</span></div></div>' +
-          '<div class="mp-label" style="margin-top:14px;">사용 금액</div>' +
-          '<div class="mp-total neg" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(txTotal) + '</div>' +
-          '<div class="mp-loan-stats">이번 달 순저축 <b style="' + (net<0?'color:var(--negative);':'') + '">' + won(net) + '</b></div>' +
+          '<div class="mp-sv-fields">' +
+            savingsFieldRowHTML('저축금액', 'set-savings-amount', sm.amount||0) +
+            savingsFieldRowHTML('결산이자', 'set-savings-interest', sm.interest||0) +
+            savingsFieldRowHTML('집안행사비용', 'set-savings-event', sm.eventCost||0) +
+            savingsReadRowHTML('사용 금액', txTotal, 'mp-sv-used') +
+            savingsReadRowHTML('이번 달 순저축', net, 'mp-sv-net') +
+          '</div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           '<form class="mp-savings-tx-add" data-action="add-savings-tx">' +
@@ -2755,7 +2787,9 @@
     if(digitsBefore === 0) pos = (negative && formatted.charAt(0)==="-") ? 1 : 0;
     el.setSelectionRange(pos, pos);
 
-    if(el.closest && el.closest(".mp-balance-input-row")){
+    if(el.classList.contains("mp-sv-input")){
+      el.style.width = moneyChWidth(formatted, false);
+    } else if(el.closest && el.closest(".mp-balance-input-row")){
       el.style.width = moneyChWidth(formatted, el.classList.contains("mp-loan-input"));
     }
 
@@ -2789,10 +2823,9 @@
         var liveTotalAll = totalSavingsAllTime() - savingsNet(smLive) + liveNet;
         var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
         if(heroTotalEl) heroTotalEl.textContent = won(liveTotalAll);
-        var savingsNetB = savingsCard.querySelector(".mp-loan-stats b");
+        var savingsNetB = savingsCard.querySelector(".mp-sv-net");
         if(savingsNetB){
-          savingsNetB.textContent = won(liveNet);
-          savingsNetB.style.color = liveNet < 0 ? "var(--negative)" : "";
+          savingsNetB.textContent = won(liveNet).replace("원","");
         }
       }
     }
