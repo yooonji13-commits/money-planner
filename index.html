@@ -517,6 +517,12 @@
   .mp-progress.lv3 > div{ background:var(--accent); }
   .mp-progress.lv4 > div{ background:#1B5FC1; }
   .mp-progress.over > div{ background:var(--negative); }
+  .mp-progress.done > div{ background:var(--positive); }
+  /* 대출 카드: 대출 금액과 잔여 금액을 위아래로, 같은 크기로 보여준다 */
+  .mp-loan-amount{ width:100%; }
+  .mp-account-body .mp-loan-amount .mp-balance-edit{ font-size:1.1rem; }
+  .mp-loan-amount .mp-balance-suffix{ font-size:1.1rem; }
+  .mp-loan-amount .mp-account-total{ font-size:1.1rem; }
   .mp-carry-btn{ margin-top:12px; }
 
   .mp-tx-list{ display:flex; flex-direction:column; }
@@ -659,6 +665,8 @@
   var LIVING_FIXED_CATEGORIES = ["월급", "정훈", "윤지", "기타"];
   // 저축 탭에서 쓰는 분류 (사용 내역, 고정내역 모두 같은 목록)
   var SAVINGS_CATEGORIES = ["가족행사", "일반"];
+  // 달을 오가는 탭들. 탭마다 보고 있던 달을 따로 기억한다(한쪽을 옮겨도 다른 쪽은 그대로).
+  var MONTH_TABS = ["living", "utility", "family"];
   // 고정내역에서 분류를 직접 적지 않고 고르는 탭들
   var FIXED_CATEGORY_OPTIONS = { living: LIVING_FIXED_CATEGORIES, family: SAVINGS_CATEGORIES };
   // '저축'은 직접 입력하는 분류가 아니라, 월급에서 나머지를 모두 뺀 값을 보여주는 자리다.
@@ -738,9 +746,10 @@
 
   var state = loadState();
   // 앱을 새로 열 때마다(완전히 종료 후 재실행 포함) 생활비/관리비/저축 탭이 오늘이 포함된
-  // 달로 시작하도록 리셋한다. 이후 세션 중에는 탭을 오가도 이동했던 달이 유지된다
-  // (탭 클릭 핸들러에서는 더 이상 이 값을 건드리지 않기 때문).
+  // 달로 시작하도록 리셋한다. 이후 세션 중에는 탭마다 보고 있던 달이 따로 유지된다.
   state.currentMonth = new Date().toISOString().slice(0,7);
+  state.monthByTab = {};
+  MONTH_TABS.forEach(function(t){ state.monthByTab[t] = state.currentMonth; });
 
   function saveState(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -821,7 +830,8 @@
       // 원격 갱신을 받아도 지금 보고 있는 탭/월은 그대로 유지한다 (안 그러면 다른 기기나
       // 남아있던 탭이 저축 탭에 있을 때 실시간 갱신이 올 때마다 현재 화면이 그쪽으로 튕겨나간다).
       activeTab: state.activeTab,
-      currentMonth: state.currentMonth
+      currentMonth: state.currentMonth,
+      monthByTab: state.monthByTab
     });
     migrateReflectedFlags(merged);
     // 개인 탭 잠금 화면에서 비밀번호를 입력하는 도중에는 다시 그리지 않는다.
@@ -1500,10 +1510,18 @@
     var liveInstallment = instInput ? Math.max(0, parseInt(instInput.value, 10) || 0) : loLive.currentInstallment;
     var liveRepaid = liveInstallment * Number(loLive.monthlyPayment||0);
     var liveRemaining = liveOriginal - liveRepaid;
-    var loanTotalEl = loanCard.querySelector(".mp-balance-row .mp-account-total");
+    var loanTotalEl = loanCard.querySelector(".mp-loan-amount .mp-account-total");
     if(loanTotalEl){
       loanTotalEl.textContent = won(liveRemaining);
       loanTotalEl.classList.toggle("neg", liveRemaining < 0);
+    }
+    // 상환 게이지도 같이 움직인다
+    var loanBarEl = loanCard.querySelector(".mp-progress");
+    if(loanBarEl){
+      var liveBar = loanBarState(liveOriginal, liveRepaid);
+      loanBarEl.className = "mp-progress " + liveBar.cls;
+      var loanFillEl = loanBarEl.querySelector("div");
+      if(loanFillEl) loanFillEl.style.width = liveBar.pct + "%";
     }
     var liveTotalInst = Number(loLive.monthlyPayment||0) > 0 ? Math.ceil(liveOriginal / Number(loLive.monthlyPayment)) : 0;
     var liveRemainInst = liveTotalInst > 0 ? Math.max(0, liveTotalInst - liveInstallment) : 0;
@@ -1537,12 +1555,19 @@
     var card = document.querySelector("#mp-main .mp-account.is-expanded");
     if(card){
       var remaining = loanRemaining(loan);
-      var totalEl = card.querySelector(".mp-balance-row .mp-account-total");
+      var totalEl = card.querySelector(".mp-loan-amount .mp-account-total");
       if(totalEl){
         totalEl.textContent = won(remaining);
         totalEl.classList.toggle("neg", remaining < 0);
       }
       var repaid = loanRepaid(loan);
+      var barEl = card.querySelector(".mp-progress");
+      if(barEl){
+        var bar = loanBarState(loan.originalAmount, repaid);
+        barEl.className = "mp-progress " + bar.cls;
+        var fillEl = barEl.querySelector("div");
+        if(fillEl) fillEl.style.width = bar.pct + "%";
+      }
       var totalInst = loanTotalInstallments(loan);
       var remainInst = loanRemainingInstallments(loan);
       var statsEl = card.querySelector(".mp-loan-stats");
@@ -1646,6 +1671,19 @@
     var mp = Number(loan.monthlyPayment||0);
     if(mp <= 0) return 0;
     return Math.ceil(Number(loan.originalAmount||0) / mp);
+  }
+  // 대출 상환 게이지: 갚은 만큼 채워지고, 다 갚으면 꽉 찬다.
+  function loanBarState(original, repaid){
+    original = Number(original || 0);
+    repaid = Math.max(0, Number(repaid || 0));
+    var pct = original > 0 ? Math.min(100, (repaid / original) * 100) : 0;
+    var cls;
+    if(original > 0 && repaid >= original) cls = "done";
+    else if(pct >= 75) cls = "lv4";
+    else if(pct >= 50) cls = "lv3";
+    else if(pct >= 25) cls = "lv2";
+    else cls = "lv1";
+    return { pct: pct, cls: cls };
   }
   function loanRemainingInstallments(loan){
     var t = loanTotalInstallments(loan);
@@ -2378,6 +2416,7 @@
       var repaid0 = loanRepaid(expandedLoan);
       var totalInst0 = loanTotalInstallments(expandedLoan);
       var remainInst0 = loanRemainingInstallments(expandedLoan);
+      var loanBar0 = loanBarState(expandedLoan.originalAmount, repaid0);
 
       html += '<div class="mp-account is-expanded">' +
         '<div class="mp-account-body">' +
@@ -2389,19 +2428,18 @@
             '</span>' +
           '</div>' +
           (expandedLoan.startDate ? '<div class="mp-account-purpose">' + fmtDateDots(expandedLoan.startDate) + ' 시작</div>' : '') +
-          '<div class="mp-balance-row">' +
-            '<div class="mp-balance-field">' +
-              '<div class="mp-balance-label">대출 금액</div>' +
-              '<div class="mp-balance-input-row">' +
-                '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0" style="width:' + moneyChWidth(expandedLoan.originalAmount||0) + ';">' +
-                '<span class="mp-balance-suffix">원</span>' +
-              '</div>' +
-            '</div>' +
-            '<div class="mp-balance-field">' +
-              '<div class="mp-balance-label">잔여 금액</div>' +
-              '<div class="mp-account-total' + (remaining0<0?' neg':'') + '">' + won(remaining0) + '</div>' +
+          '<div class="mp-balance-field mp-loan-amount">' +
+            '<div class="mp-balance-label">대출 금액</div>' +
+            '<div class="mp-balance-input-row">' +
+              '<input type="text" inputmode="numeric" class="mp-money mp-balance-edit" data-action="set-loan-original" data-id="' + expandedLoan.id + '" value="' + formatNumberString(expandedLoan.originalAmount||0) + '" placeholder="0" style="width:' + moneyChWidth(expandedLoan.originalAmount||0) + ';">' +
+              '<span class="mp-balance-suffix">원</span>' +
             '</div>' +
           '</div>' +
+          '<div class="mp-balance-field mp-loan-amount" style="margin-top:10px;">' +
+            '<div class="mp-balance-label">잔여 금액</div>' +
+            '<div class="mp-account-total' + (remaining0<0?' neg':'') + '">' + won(remaining0) + '</div>' +
+          '</div>' +
+          '<div class="mp-progress ' + loanBar0.cls + '" style="width:100%;"><div style="width:' + loanBar0.pct + '%"></div></div>' +
           '<div class="mp-balance-field" style="margin-top:10px;">' +
             '<div class="mp-balance-label">현재 회차</div>' +
             '<input type="number" inputmode="numeric" class="mp-balance-edit" data-action="set-loan-installment" data-id="' + expandedLoan.id + '" value="' + Number(expandedLoan.currentInstallment||0) + '" placeholder="0" min="0" step="1" style="width:100%;">' +
@@ -2461,7 +2499,13 @@
       commitPendingLivingFields();
       commitPendingLoanFields();
       commitPendingPersonalFields();
+      // 탭마다 보고 있던 달을 따로 기억한다. (생활비에서 8월을 보다 관리비로 가면
+      // 관리비는 관리비가 보고 있던 달 그대로여야 한다)
+      if(MONTH_TABS.indexOf(state.activeTab) >= 0) state.monthByTab[state.activeTab] = state.currentMonth;
       state.activeTab = btn.dataset.tab;
+      if(MONTH_TABS.indexOf(state.activeTab) >= 0){
+        state.currentMonth = state.monthByTab[state.activeTab] || state.currentMonth;
+      }
       saveState(); render();
       main.classList.remove("mp-tab-fade");
       void main.offsetWidth;
@@ -2595,7 +2639,12 @@
     if(action === "carry-over-next-month"){
       var srcKey = state.currentMonth;
       var srcMonth = getLivingMonth(srcKey);
-      if(srcMonth.carriedOver){ alert("이미 이번 달 잔액을 다음 달로 이월했어요."); return; }
+      // 예전에는 '이월했다'는 표시만 따로 남겼는데, 다음 달의 이월 내역을 지워도 그 표시는
+      // 남아 있어서 이월한 적이 없는데도 이미 했다고 막히곤 했다. 이제 다음 달에 이 달에서
+      // 넘어간 내역이 실제로 있는지를 보고 판단한다.
+      var carriedTarget = getLivingMonth(shiftMonth(srcKey, 1));
+      var alreadyCarried = (carriedTarget.tx || []).some(function(t){ return t.carryFrom === srcKey; });
+      if(alreadyCarried){ alert("이미 이번 달 잔액을 다음 달로 이월했어요."); return; }
       var spentX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
       var receivedX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
       var remainX = Number(srcMonth.budget||0) - spentX + receivedX;
@@ -2608,9 +2657,10 @@
         date: lastDayOfMonth(srcKey),
         memo: monthLabel(srcKey) + ' 이월',
         amount: remainX,
-        type: "income"
+        type: "income",
+        carryFrom: srcKey
       });
-      srcMonth.carriedOver = true;
+      delete srcMonth.carriedOver;
       saveState(); render();
       return;
     }
