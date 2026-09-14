@@ -674,6 +674,17 @@
   var SAVINGS_CATEGORIES = ["가족행사", "일반"];
   // 달을 오가는 탭들. 탭마다 보고 있던 달을 따로 기억한다(한쪽을 옮겨도 다른 쪽은 그대로).
   var MONTH_TABS = ["living", "utility", "family"];
+  // x(삭제)를 누르면 한 번 더 확인한다. 새 삭제 기능이 생겨도 자동으로 적용되도록
+  // 클릭 처리 맨 앞에서 "delete-"로 시작하는 동작을 한꺼번에 막아둔다.
+  var DELETE_CONFIRM_TEXT = {
+    "delete-account": "이 계좌를 삭제할까요? 기록도 함께 삭제돼요.",
+    "delete-loan": "이 대출을 삭제할까요?",
+    "delete-fixed-expense": "이 고정지출을 삭제할까요?",
+    "delete-lf-item": "이 고정내역을 삭제할까요?",
+    "delete-tx": "이 내역을 삭제할까요?",
+    "delete-living-tx": "이 내역을 삭제할까요?",
+    "delete-savings-tx": "이 내역을 삭제할까요?"
+  };
   // 고정내역에서 분류를 직접 적지 않고 고르는 탭들
   var FIXED_CATEGORY_OPTIONS = { living: LIVING_FIXED_CATEGORIES, family: SAVINGS_CATEGORIES };
   // '저축'은 직접 입력하는 분류가 아니라, 월급에서 나머지를 모두 뺀 값을 보여주는 자리다.
@@ -2527,6 +2538,10 @@
     if(!el) return;
     var action = el.dataset.action;
 
+    if(action.indexOf("delete-") === 0){
+      if(!confirm(DELETE_CONFIRM_TEXT[action] || "정말 삭제할까요?")) return;
+    }
+
     if(action === "toggle-sync-panel"){
       uiFlags.showSync = !uiFlags.showSync;
       uiFlags.syncJoinError = "";
@@ -2757,7 +2772,6 @@
     }
 
     if(action === "delete-account"){
-      if(!confirm("이 계좌를 삭제할까요? 기록도 함께 삭제돼요.")) return;
       state.accounts = state.accounts.filter(function(a){ return a.id !== el.dataset.id; });
       delete state.logs[el.dataset.id];
       saveState(); render(); return;
@@ -2772,7 +2786,6 @@
     if(action === "show-add-loan"){ uiFlags.showAddLoan = true; render(); return; }
     if(action === "cancel-add-loan"){ uiFlags.showAddLoan = false; render(); return; }
     if(action === "delete-loan"){
-      if(!confirm("이 대출을 삭제할까요?")) return;
       state.loans = state.loans.filter(function(l){ return l.id !== el.dataset.id; });
       delete uiFlags.expandedLoans[el.dataset.id];
       delete uiFlags.editingLoanSettings[el.dataset.id];
@@ -2853,6 +2866,26 @@
       render();
       return;
     }
+  });
+
+  // 숫자칸을 누르면 커서를 맨 오른쪽(끝)에 둔다. 탭한 자리에 커서가 꽂히면
+  // 숫자 중간에서 고치게 돼서 늘 뒤에서부터 지우고 싶은 입력과 어긋난다.
+  function isNumberField(el){
+    if(!el || !el.classList) return false;
+    return el.classList.contains("mp-money") || el.type === "number";
+  }
+  function caretToEnd(el){
+    // type=number 입력칸은 setSelectionRange를 막는 브라우저가 있어 감싸둔다.
+    try{ var len = String(el.value || "").length; el.setSelectionRange(len, len); }catch(err){}
+  }
+  root.addEventListener("focusin", function(e){
+    if(!isNumberField(e.target)) return;
+    var el = e.target;
+    // 사파리는 포커스 직후 탭한 위치로 커서를 다시 옮기므로 한 박자 뒤에 끝으로 보낸다.
+    setTimeout(function(){ if(document.activeElement === el) caretToEnd(el); }, 0);
+  });
+  root.addEventListener("click", function(e){
+    if(isNumberField(e.target)) caretToEnd(e.target);
   });
 
   root.addEventListener("keydown", function(e){
