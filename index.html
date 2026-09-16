@@ -1134,6 +1134,9 @@
       return true;
     }catch(e){
       // 안내 화면조차 못 그렸다. false를 돌려주면 부른 쪽이 다른 길로 안내한다.
+      // 화면이 실제로 뜨지 않았으므로 깃발도 내린다 — 세워둔 채로 두면 안내 화면이 없는데도
+      // 잠금이 풀린 것처럼 가져오기가 열린다.
+      errorScreenShowing = false;
       return false;
     }finally{
       renderingErrorScreen = false;
