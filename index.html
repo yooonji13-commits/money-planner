@@ -257,6 +257,23 @@
 
   .mp-sub{ font-size:.85rem; color:var(--muted); margin-top:2px; }
 
+  /* 저장 표시: 자동으로 저장되므로, 저장 버튼 대신 "저장됨 ✓"이 잠깐 보이고 사라진다.
+     나타나고 사라질 때 아래위 줄이 밀리면 입력 중에 화면이 튀므로, 자리(height)는
+     항상 차지한 채 보이기만 켰다 끈다. 375px 폭에서도 한 줄에 들어가도록 줄바꿈을 막는다. */
+  .mp-save-flash{
+    margin-top:8px; height:1.1rem; line-height:1.1rem;
+    font-size:.74rem; font-weight:700; color:var(--positive);
+    white-space:nowrap; overflow:hidden; pointer-events:none;
+    /* 꺼져 있을 때 visibility:hidden 까지 주는 이유: opacity:0 만으로는 글자가 계속
+       화면 읽기 프로그램에 읽힌다. 사라지는 흐림 효과는 끝난 뒤에 감춘다. */
+    opacity:0; visibility:hidden;
+    transition:opacity .18s ease, visibility 0s linear .18s;
+  }
+  .mp-save-flash.is-on{
+    opacity:1; visibility:visible;
+    transition:opacity .18s ease, visibility 0s linear 0s;
+  }
+
   /* account cards */
   .mp-accounts-grid{
     display:grid; grid-template-columns:1fr 1fr; gap:14px;
@@ -607,6 +624,25 @@
   .mp-lock-form{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:6px; }
   .mp-pw-form{ display:flex; flex-direction:column; gap:8px; }
 
+  /* 화면이 안 뜰 때 빈 화면 대신 보여주는 안내 화면. 아이폰(375px)에서도 설명과 두 버튼이
+     한눈에 들어오도록 가운데로 모아 세로로 쌓는다. */
+  .mp-error-screen{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:32px 18px; text-align:center; }
+  .mp-error-icon{ font-size:2.4rem; line-height:1; }
+  .mp-error-title{ font-size:1rem; font-weight:800; color:var(--ink); }
+  .mp-error-desc{ font-size:.86rem; color:var(--muted); line-height:1.6; word-break:keep-all; }
+  .mp-error-actions{ display:flex; flex-direction:column; gap:8px; width:100%; max-width:280px; margin-top:6px; }
+
+  /* 저장 실패처럼 흐름을 멈추면 안 되는 안내. alert()과 달리 화면을 붙잡지 않는다.
+     아래 탭바(.mp-tabbar)를 가리지 않도록 그 높이만큼 띄운다 — 탭바가 아래 안전영역만큼
+     같이 두꺼워지므로 여기서도 같은 max() 식을 그대로 쓴다. */
+  .mp-notice{
+    position:fixed; left:50%; bottom:calc(80px + max(12px, env(safe-area-inset-bottom))); transform:translate(-50%, 8px);
+    max-width:calc(100% - 32px); padding:10px 16px; border-radius:var(--radius-md);
+    background:rgba(24,28,34,.92); color:#FFFFFF; font-size:.86rem; line-height:1.35; text-align:center;
+    opacity:0; pointer-events:none; transition:opacity .18s ease, transform .18s ease; z-index:60;
+  }
+  .mp-notice.show{ opacity:1; transform:translate(-50%, 0); }
+
   ::-webkit-scrollbar{ width:0; height:0; }
 </style>
 </head>
@@ -616,8 +652,8 @@
     <div class="mp-date" id="mp-headerdate"></div>
     <div class="mp-header-actions">
       <button class="mp-reset-btn" id="mp-sync-btn" data-action="toggle-sync-panel" type="button">동기화</button>
-      <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
-      <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
+      <button class="mp-reset-btn" id="mp-export-btn" data-action="export-data" type="button">내보내기</button>
+      <button class="mp-reset-btn" id="mp-import-btn" data-action="trigger-import" type="button">가져오기</button>
       <button class="mp-reset-btn" id="mp-calc-btn" data-action="toggle-calculator" type="button">계산기</button>
       <button class="mp-reset-btn" id="mp-lf-btn" data-action="toggle-fixed-items" type="button">고정내역</button>
     </div>
@@ -701,8 +737,7 @@
       living: {},
       loans: [],
       utilities: {},
-      fixedItemsByTab: { personal: [], living: [], family: [] },
-      personalPasswordHash: ""
+      fixedItemsByTab: { personal: [], living: [], family: [] }
     };
   }
 
@@ -738,28 +773,420 @@
     return s;
   }
 
-  function loadState(){
-    try{
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return defaultState();
-      var parsed = JSON.parse(raw);
-      var d = defaultState();
-      var merged = Object.assign(d, parsed, {
-        accounts: parsed.accounts || d.accounts,
-        logs: parsed.logs || {},
-        savings: parsed.savings || {},
-        savingsExpenses: parsed.savingsExpenses || [],
-        living: parsed.living || {},
-        loans: parsed.loans || [],
-        utilities: parsed.utilities || {},
-        fixedItemsByTab: parsed.fixedItemsByTab || d.fixedItemsByTab
-      });
-      migrateReflectedFlags(merged);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      return merged;
-    }catch(e){
-      return defaultState();
+  // ---------- 기기 저장소에 쓰기 ----------
+  // localStorage 쓰기는 저장 공간이 꽉 차거나 브라우저가 막으면 예외를 던진다. 감싸두지 않으면
+  // 저장이 실패한 그 순간 같은 처리 안에서 뒤따르던 화면 갱신까지 함께 멈춰버린다.
+  // 여기서 잡아두면 실패는 사용자에게 알리되 화면은 그대로 이어서 그려진다.
+  var SAVE_FAIL_NOTICE_GAP_MS = 10000;
+  var lastSaveFailNoticeAt = 0;
+  var noticeHideTimer = null;
+
+  // 저장 실패 같은 안내는 alert() 대신 잠깐 떠 있다 사라지는 띠로 알린다.
+  // alert()은 확인을 누를 때까지 화면 갱신을 붙잡아 두고, 연달아 뜨면 입력을 이어갈 수 없다.
+  function showNotice(msg){
+    if(!document.body) return;
+    var el = document.getElementById("mp-notice");
+    if(!el){
+      el = document.createElement("div");
+      el.id = "mp-notice";
+      el.className = "mp-notice";
+      document.body.appendChild(el);
     }
+    el.textContent = msg;
+    // 다시 띄울 때 나타나는 동작이 처음부터 돌도록 클래스를 한 번 뗐다 붙인다.
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+    clearTimeout(noticeHideTimer);
+    noticeHideTimer = setTimeout(function(){ el.classList.remove("show"); }, 4000);
+  }
+
+  function notifySaveFailed(){
+    // 같은 안내가 연달아 쏟아지지 않게, 한 번 알린 뒤에는 잠시 묶는다.
+    var now = Date.now();
+    if(now - lastSaveFailNoticeAt < SAVE_FAIL_NOTICE_GAP_MS) return;
+    lastSaveFailNoticeAt = now;
+    showNotice("저장 공간이 부족해 저장하지 못했어요.");
+  }
+
+  // 성공하면 true. 실패해도 예외를 밖으로 내보내지 않으므로 호출한 쪽의 다음 줄은 계속 돈다.
+  function writeStorage(key, value){
+    try{
+      localStorage.setItem(key, value);
+      return true;
+    }catch(e){
+      notifySaveFailed();
+      return false;
+    }
+  }
+
+  // 읽기도 막힐 수 있다(시크릿 모드 등에서는 getItem 자체가 예외를 던진다). 저장 흐름 중간에서
+  // 터지면 뒤따르던 화면 갱신까지 함께 멈추므로, 못 읽으면 "없음"으로 보고 넘어간다.
+  function readStorage(key){
+    try{
+      return localStorage.getItem(key);
+    }catch(e){
+      return null;
+    }
+  }
+
+  // ---------- 개인 탭 비밀번호는 기기에만 둔다 ----------
+  // 예전에는 비밀번호 해시가 가계부 상태(state) 안에 있어서 동기화 데이터에 그대로 실려 다녔다.
+  // 그래서 한 기기에서 걸면 연결된 다른 기기까지 같이 잠기고, 한쪽에서 풀면 양쪽이 풀렸다.
+  // 이제는 가계부 상태 밖의 이 자리에만 저장한다 — 클라우드로 보내지 않고, 클라우드에서 받아도
+  // 반영하지 않으며, 내보내기 파일에도 담기지 않는다.
+  var PASSWORD_KEY = "mp_personal_pw_v1";
+  var devicePasswordHash = readStorage(PASSWORD_KEY) || "";
+
+  function getPersonalPasswordHash(){ return devicePasswordHash; }
+
+  function setPersonalPasswordHash(hash){
+    devicePasswordHash = hash || "";
+    if(devicePasswordHash) writeStorage(PASSWORD_KEY, devicePasswordHash);
+    else { try{ localStorage.removeItem(PASSWORD_KEY); }catch(e){} }
+  }
+
+  // ---------- 데이터 정규화 ----------
+  // 같은 데이터가 세 경로로 들어온다: 기기 저장분 읽기(loadState), 클라우드에서 받기
+  // (applyRemoteState), 백업 파일 가져오기. 세 경로가 모두 아래 normalizeState() 한 곳을 지난다.
+  // 예전에는 비슷한 Object.assign 묶음이 세 군데에 따로 있어서 규칙이 조금씩 갈라져 있었다
+  // (가져오기 경로에는 fixedItemsByTab 합치기가 아예 빠져 있었다).
+  //
+  // 원칙: 기록을 절대 버리지 않는다. 읽을 수 없는 값만 안전한 기본값으로 바꿔서 어떤 탭도
+  // 그리다 터지지 않게 한다. 날짜·금액이 비어 보이는 줄은 화면에 그대로 남고 사용자가 직접 고친다.
+
+  var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // 배열도 typeof는 "object"지만 "달 → 값" 묶음으로는 쓸 수 없으므로 따로 걸러낸다.
+  function isPlainObject(v){ return !!v && typeof v === "object" && !Array.isArray(v); }
+
+  function normString(v){ return typeof v === "string" ? v : ""; }
+
+  function normDate(v){ return (typeof v === "string" && ISO_DATE_RE.test(v)) ? v : ""; }
+
+  // 금액은 반드시 유한한 숫자로 만든다. 다만 "5000"처럼 숫자로 읽히는 문자열까지 0으로
+  // 지워버리면 멀쩡한 금액을 잃는 셈이므로, 숫자로 읽히면 숫자로 바꿔서 살린다.
+  function normAmount(v){
+    if(typeof v === "number" && isFinite(v)) return v;
+    if(typeof v === "string" && v.trim() !== ""){
+      var n = Number(v);
+      if(isFinite(n)) return n;
+    }
+    return 0;
+  }
+
+  function normType(v){ return (v === "income" || v === "expense") ? v : "expense"; }
+
+  // 내역 한 줄(개인 탭 기록, 생활비 내역, 저축 사용 내역, 고정내역, 고정지출).
+  // seen은 한 목록 안에서 이미 쓴 id 모음이다. 같은 id가 두 번 나오면 뒤에 나온 줄에 새 id를
+  // 준다 — 삭제는 같은 id를 가진 줄을 전부 지우고 편집은 첫 줄만 잡기 때문에, 중복인 채로 두면
+  // 한 줄을 지울 때 다른 줄이 함께 사라진다. id를 다시 발급하는 건 기록을 지우는 게 아니다.
+  function normalizeEntry(entry, seen, report){
+    var e = isPlainObject(entry) ? entry : {};
+    // 줄 자체가 객체가 아니었어도 버리지 않고 빈 줄로 남긴다(사용자가 보고 직접 정리한다).
+    if(e !== entry) report.fixed++;
+
+    if(typeof e.id !== "string" || !e.id){ e.id = uid(); report.fixed++; }
+    else if(seen[e.id]){ e.id = uid(); report.fixed++; }
+    seen[e.id] = true;
+
+    // 없던 칸을 채우는 것은 "보정"이 아니다. 내역 종류마다 쓰는 칸이 다르다(고정지출은
+    // date·type이 없고, 저축 사용 내역은 type이 없다). 채운 것까지 세면 멀쩡한 백업을
+    // 가져와도 "몇백 군데 보정했어요"가 떠서, 사용자가 자기 파일이 깨진 줄로 안다.
+    // 그러므로 값이 실제로 있었고 그 값이 틀렸을 때만 센다.
+    var hadDate = ("date" in e);
+    var d = normDate(e.date);
+    if(d !== e.date){ e.date = d; if(hadDate) report.fixed++; }
+
+    var hadAmount = ("amount" in e);
+    var a = normAmount(e.amount);
+    if(a !== e.amount){ e.amount = a; if(hadAmount) report.fixed++; }
+
+    var hadType = ("type" in e);
+    var t = normType(e.type);
+    if(t !== e.type){ e.type = t; if(hadType) report.fixed++; }
+
+    // ts는 유한한 숫자가 아니면 0으로 만들지 않고 아예 없앤다. 정렬이 "없음"과 "0"을 다르게
+    // 다루기 때문이다. compareTxForList()가 "없음"을 먼저 적힌 줄로 보고 원래 순서를 지키는데,
+    // 0으로 채우면 그 줄만 같은 날짜 안에서 맨 끝으로 밀려난다.
+    if("ts" in e && !(typeof e.ts === "number" && isFinite(e.ts))){ delete e.ts; report.fixed++; }
+
+    // 문자열 칸은 이미 있는 것만 손본다. 그 종류의 내역이 쓰지도 않는 빈 칸을 새로 만들지 않는다.
+    ["memo","name","note","category"].forEach(function(k){
+      if((k in e) && typeof e[k] !== "string"){ e[k] = ""; report.fixed++; }
+    });
+
+    // 이월 짝 표식(carryPairId)은 그대로 살려둔다. 이 값이 사라지면 두 줄이 한 쌍이라는
+    // 사실을 잃어버려 한쪽만 남는 상태가 생긴다. 다만 문자열이 아니거나 비어 있으면 아예
+    // 없앤다 — ""로 남겨두면 표식 없는 예전 줄끼리 서로 짝인 것처럼 보여서 한 줄을 지울 때
+    // 엉뚱한 줄이 함께 사라진다. carryFrom("어느 달에서 넘어왔는지")과는 다른 칸이다.
+    if(("carryPairId" in e) && (typeof e.carryPairId !== "string" || !e.carryPairId)){
+      delete e.carryPairId; report.fixed++;
+    }
+    return e;
+  }
+
+  function normalizeEntryList(list, report){
+    if(!Array.isArray(list)){
+      if(list !== undefined) report.fixed++;
+      return [];
+    }
+    // id 모음은 Object.create(null)로 만든다. 보통 객체로 만들면 "constructor" 같은 id가
+    // Object.prototype 때문에 이미 쓴 것처럼 보여서 멀쩡한 id가 괜히 다시 발급된다.
+    var seen = Object.create(null);
+    return list.map(function(item){ return normalizeEntry(item, seen, report); });
+  }
+
+  // 달 묶음의 기본 형태. 읽을 때 빈 달을 만들어 주는 get*Month()들과 같은 곳을 쓴다.
+  function defaultLivingMonth(){ return { budget: 0, tx: [] }; }
+  function defaultSavingsMonth(){ return { amount: 0, interest: 0, eventCost: 0, tx: [] }; }
+  function defaultUtilityMonth(){ return { payDate: "", community: 0, electricity: 0, water: 0, heating: 0, other: 0 }; }
+
+  // spec: { make: 기본 형태를 만드는 함수, nums: 숫자 칸, strs: 문자열 칸, tx: 내역 목록이 있는지 }
+  function normalizeMonthBuckets(map, spec, report){
+    Object.keys(map).forEach(function(key){
+      // tx를 손보기 '전에' 달 묶음 자체가 객체인지 먼저 본다. 숫자·문자열·null이 들어 있으면
+      // 예전 코드는 "값이 있다"로 보고 그냥 통과시킨 뒤 목록을 읽다 터졌고, 원시값에 속성을
+      // 붙이려 해도 "use strict"에서 예외가 난다.
+      if(!isPlainObject(map[key])){ map[key] = spec.make(); report.fixed++; return; }
+      var b = map[key];
+      if(spec.tx){
+        if(!Array.isArray(b.tx)){ b.tx = []; report.fixed++; }
+        else b.tx = normalizeEntryList(b.tx, report);
+      } else if(("tx" in b) && !Array.isArray(b.tx)){
+        // 관리비 달 묶음에는 원래 내역 목록이 없다. 예전 데이터에 남아 있다면 모양만 맞춰둔다.
+        b.tx = []; report.fixed++;
+      }
+      spec.nums.forEach(function(f){
+        var n = normAmount(b[f]);
+        if(n !== b[f]){ b[f] = n; report.fixed++; }
+      });
+      spec.strs.forEach(function(f){
+        // 날짜 칸이 문자열이 아니면 fmtDateDots()가 .split()을 부르다 터져서 탭이 안 그려진다.
+        var s = normString(b[f]);
+        if(s !== b[f]){ b[f] = s; report.fixed++; }
+      });
+    });
+  }
+
+  // 세 경로가 공유하는 단 하나의 정규화. report.fixed에 몇 군데를 보정했는지 쌓인다.
+  function normalizeState(raw, report){
+    report = report || { fixed: 0 };
+    if(typeof report.fixed !== "number") report.fixed = 0;
+
+    var s = defaultState();
+    // 모르는 칸(지금은 아무도 읽지 않는 savingsExpenses 포함)도 손대지 않고 그대로 넘긴다.
+    if(isPlainObject(raw)) Object.assign(s, raw);
+
+    // 개인 탭 비밀번호는 기기에만 두는 값이라 가계부 상태에서 떼어낸다. 세 경로가 모두 여기를
+    // 지나므로, 클라우드에서 받은 데이터에 들어 있어도·예전 형식 백업 파일에 들어 있어도
+    // 이 기기의 비밀번호는 그대로다(가져오기로 남의 비밀번호가 걸리지 않는다).
+    // 기기 저장분에 남아 있던 예전 값만 loadState()가 report에서 꺼내 기기 자리로 옮긴다.
+    // 보정 횟수(report.fixed)에는 세지 않는다 — 깨진 값을 고친 게 아니라 자리를 옮긴 것이다.
+    report.legacyPasswordHash = (typeof s.personalPasswordHash === "string") ? s.personalPasswordHash : "";
+    delete s.personalPasswordHash;
+
+    // 컨테이너 모양을 먼저 맞춘다. migrateReflectedFlags()가 accounts/loans를 훑기 때문에
+    // 그보다 앞서 배열·객체임을 보장해야 한다(숫자에 .forEach를 부르면 그대로 터진다).
+    if(!Array.isArray(s.accounts)) s.accounts = [];
+    if(!Array.isArray(s.loans)) s.loans = [];
+    if(!isPlainObject(s.logs)) s.logs = {};
+    if(!isPlainObject(s.living)) s.living = {};
+    if(!isPlainObject(s.savings)) s.savings = {};
+    if(!isPlainObject(s.utilities)) s.utilities = {};
+    if(!isPlainObject(s.fixedItemsByTab)) s.fixedItemsByTab = {};
+
+    function asObject(v){
+      if(isPlainObject(v)) return v;
+      report.fixed++;
+      return {};
+    }
+    // 계좌·대출 칸 자체가 객체가 아니면 빈 객체로 바꿔 자리는 남긴다(줄을 지우지 않는다).
+    s.accounts = s.accounts.map(asObject);
+    s.loans = s.loans.map(asObject);
+
+    migrateReflectedFlags(s);
+
+    // 고정내역은 탭마다 목록이 따로다. 모르는 탭 키가 남아 있어도 모양만 맞춰 그대로 둔다.
+    Object.keys(s.fixedItemsByTab).forEach(function(tab){
+      s.fixedItemsByTab[tab] = normalizeEntryList(s.fixedItemsByTab[tab], report);
+    });
+
+    // 개인 탭 기록. 지금 없는 계좌의 키가 남아 있어도 지우지 않는다(계좌가 돌아오면 기록도 돌아온다).
+    Object.keys(s.logs).forEach(function(accId){
+      s.logs[accId] = normalizeEntryList(s.logs[accId], report);
+    });
+
+    s.accounts.forEach(function(a){
+      a.fixedExpenses = normalizeEntryList(a.fixedExpenses, report);
+      // 계좌 id가 없으면 편집·삭제가 아예 안 잡히므로 새로 발급한다. 다만 계좌 id가 겹칠 때는
+      // 다시 발급하지 않는다 — logs는 계좌 id를 열쇠로 쓰기 때문에, id를 바꾸면 그 계좌의
+      // 기록 전체가 떨어져 나간다. 그건 "기록을 버리지 않는다"와 정면으로 어긋난다.
+      if(typeof a.id !== "string" || !a.id){ a.id = uid(); report.fixed++; }
+    });
+    s.loans.forEach(function(l){
+      if(typeof l.id !== "string" || !l.id){ l.id = uid(); report.fixed++; }
+    });
+
+    normalizeMonthBuckets(s.living, { make: defaultLivingMonth, nums: ["budget"], strs: [], tx: true }, report);
+    normalizeMonthBuckets(s.savings, { make: defaultSavingsMonth, nums: ["amount","interest","eventCost"], strs: [], tx: true }, report);
+    normalizeMonthBuckets(s.utilities, { make: defaultUtilityMonth, nums: ["community","electricity","water","heating","other"], strs: ["payDate"], tx: false }, report);
+
+    return s;
+  }
+
+  // 머니플래너 백업 파일인지 본다. 여섯 열쇠 중 하나라도 있으면 우리 파일로 본다(일부만 담긴
+  // 오래된 백업까지 거절하지 않기 위해서다). 하나도 없으면 다른 앱의 파일이다.
+  var BACKUP_KEYS = ["accounts", "logs", "living", "savings", "utilities", "loans"];
+  function looksLikeBackup(obj){
+    return BACKUP_KEYS.some(function(k){ return Object.prototype.hasOwnProperty.call(obj, k); });
+  }
+
+  // ---------- 기기 저장분을 읽을 수 없을 때 ----------
+  // 저장된 원문이 JSON으로 읽히지 않으면 예전에는 말없이 빈 가계부로 시작했다. 그 뒤 한 번만
+  // 저장되면 원래 내용을 덮고, 동기화가 켜져 있으면 다른 기기 내용까지 빈 것으로 덮어썼다.
+  // 그래서 이 상태에서는 가계부 상태를 저장하지도, 클라우드로 보내지도 않는다.
+  var UNREADABLE_BACKUP_PREFIX = "mp_data_v1_unreadable";
+  var storageUnreadable = false;
+  var unreadableInfo = null;
+
+  function preserveUnreadableRaw(raw){
+    storageUnreadable = true;
+    unreadableInfo = { backupKey: "", preserved: false };
+    // 원래 자리(mp_data_v1)는 그대로 남긴다 — 지우면 다음에 열 때 "저장된 게 없다"로 보여
+    // 빈 가계부로 정상 시작해버리고, 안내 화면도 다시 뜨지 않는다.
+    // 복사본이 이미 있으면 덮지 않고 새 자리를 쓴다(원문을 두 번 잃지 않는다).
+    // 이 쓰기는 가계부 상태 저장이 아니라 원문을 살리기 위한 것이므로 위 저장 금지에 해당하지 않는다.
+    for(var i = 0; i < 50; i++){
+      var key = UNREADABLE_BACKUP_PREFIX + (i === 0 ? "" : "_" + i);
+      var existing;
+      try{ existing = localStorage.getItem(key); }
+      catch(e){ return; }
+      if(existing !== null) continue;
+      try{
+        localStorage.setItem(key, raw);
+        unreadableInfo.backupKey = key;
+        unreadableInfo.preserved = true;
+      }catch(e){
+        // 공간이 없어 복사를 못 해도 원문은 원래 자리에 그대로 있다. 지우지 않았으니 안전하다.
+      }
+      return;
+    }
+  }
+
+  function storageErrorInfo(){ return storageUnreadable ? unreadableInfo : null; }
+
+  // ---------- 화면이 안 뜨는 상황의 안내 화면 ----------
+  // 두 경우에 이 화면이 뜬다.
+  //   1) 기기 저장분을 읽을 수 없을 때(storageUnreadable)
+  //   2) 가계부를 그리다 예상 못한 오류가 났을 때(render()의 try/catch에서 부른다)
+  // 어느 쪽이든 빈 화면을 남기지 않고, 사용자가 할 수 있는 일 두 가지만 보여준다:
+  // 원문을 파일로 내려받기(데이터를 살리는 길), 다시 불러오기.
+  //
+  // 전체 삭제·초기화 버튼은 일부러 넣지 않는다. 화면이 깨진 순간에 손이 가기 쉬운 자리에
+  // 되돌릴 수 없는 삭제 버튼을 두면, 살릴 수 있었던 기록까지 한 번에 사라진다.
+  // 또 사용자의 금액이나 내역은 한 줄도 싣지 않는다(설명과 버튼 두 개뿐이다).
+  var renderingErrorScreen = false;
+
+  function renderStorageErrorScreen(){
+    // 안내 화면을 그리다 또 오류가 나면 render()가 이 함수를 다시 부를 수 있다. 그때 또
+    // 들어가면 끝없이 맴돈다. 그리는 동안은 빗장을 걸어 두 번째 진입을 false로 돌려보낸다.
+    if(renderingErrorScreen) return false;
+    renderingErrorScreen = true;
+    try{
+      if(!main) return false;
+      // 읽기 실패가 아니라면 그리기가 터진 경우다. 안내 문구만 그에 맞게 바꾼다.
+      var brokenByRender = !storageUnreadable;
+      var title = brokenByRender ? "화면을 여는 중 문제가 생겼어요" : "저장된 내용을 읽지 못했어요";
+      var desc = brokenByRender
+        ? "이 기기에 저장된 기록은 그대로 남아 있어요. 아래 내보내기로 파일에 담아두면 안전해요. 그다음 다시 시도를 눌러보세요."
+        : "저장된 내용이 깨져 있어서 가계부를 열지 못했어요. 원래 내용은 지우지 않고 그대로 두었고, 이 상태에서는 아무것도 저장하거나 동기화하지 않아요. 먼저 아래 내보내기로 저장된 원문을 파일에 담아두세요. 그다음 쓸 만한 백업 파일이 있으면 맨 위의 가져오기로 되살릴 수 있어요.";
+
+      // 뒤에 헤더와 탭바가 어중간하게 남지 않도록 같이 정리한다.
+      if(headerDate) headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
+      main.classList.remove("mp-util-tight-top");
+      // 고정내역은 탭마다 다른 목록을 state에서 꺼내 그린다. 지금은 그 그리기가 못 미더우니
+      // 버튼을 숨기고 열려 있던 패널도 닫는다.
+      var lfBtnErr = document.getElementById("mp-lf-btn");
+      if(lfBtnErr) lfBtnErr.hidden = true;
+      // 이 화면이 떠 있는 동안은 잠겨 있어도 가져오기를 열어둔다(importUnlocked 주석 참고).
+      // 헤더의 내보내기는 그대로 막히고, 아래 안내 화면 안의 내보내기(export-storage-raw)가
+      // 원문을 살려준다.
+      errorScreenShowing = true;
+      syncBackupButtonsHidden();
+      if(uiFlags) uiFlags.showFixedItems = false;
+      var fixedPanelErr = document.getElementById("mp-fixed-panel");
+      if(fixedPanelErr) fixedPanelErr.innerHTML = "";
+      // 탭바는 그대로 두되, 어느 탭도 켜져 있지 않아 죽어 보이지 않게 표시만 맞춰준다.
+      document.querySelectorAll(".mp-tab").forEach(function(btn){
+        btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
+      });
+
+      main.innerHTML = '<section class="mp-card mp-error-screen">' +
+        '<div class="mp-error-icon">⚠️</div>' +
+        '<div class="mp-error-title">' + esc(title) + '</div>' +
+        '<p class="mp-error-desc">' + esc(desc) + '</p>' +
+        '<div class="mp-error-actions">' +
+          '<button type="button" class="mp-btn block" data-action="export-storage-raw">내보내기</button>' +
+          '<button type="button" class="mp-btn ghost block" data-action="retry-render">다시 시도</button>' +
+        '</div>' +
+      '</section>';
+      return true;
+    }catch(e){
+      // 안내 화면조차 못 그렸다. false를 돌려주면 부른 쪽이 다른 길로 안내한다.
+      // 화면이 실제로 뜨지 않았으므로 깃발도 내린다 — 세워둔 채로 두면 안내 화면이 없는데도
+      // 잠금이 풀린 것처럼 가져오기가 열린다.
+      errorScreenShowing = false;
+      return false;
+    }finally{
+      renderingErrorScreen = false;
+    }
+  }
+
+  function loadState(){
+    var raw;
+    try{
+      raw = localStorage.getItem(STORAGE_KEY);
+    }catch(e){
+      // 저장소 접근 자체가 막힌 경우(시크릿 모드 등). 원문이 있는지조차 알 수 없으니
+      // 안내 경로로 보내지 않고 이번 세션만 빈 가계부로 쓴다. 쓰기는 어차피 writeStorage가 막는다.
+      return normalizeState(defaultState());
+    }
+    if(!raw) return normalizeState(defaultState());
+
+    var parsed;
+    try{
+      parsed = JSON.parse(raw);
+    }catch(e){
+      preserveUnreadableRaw(raw);
+      return normalizeState(defaultState());
+    }
+    // JSON으로는 읽혔지만 가계부 상태가 아닌 경우(배열·숫자·null 등)도 원문을 읽을 수 없는 것으로 본다.
+    if(!isPlainObject(parsed)){
+      preserveUnreadableRaw(raw);
+      return normalizeState(defaultState());
+    }
+
+    var merged;
+    var loadReport = { fixed: 0 };
+    try{
+      merged = normalizeState(parsed, loadReport);
+    }catch(e){
+      // 여기까지 올 일은 없어야 하지만, 혹시라도 정규화가 터지면 원문을 잃지 않는 쪽을 택한다.
+      preserveUnreadableRaw(raw);
+      return normalizeState(defaultState());
+    }
+    // 이관: 예전에는 비밀번호가 가계부 상태 안에 있었다. 그 값을 기기 자리로 옮긴다.
+    // 기기 자리에 이미 값이 있으면 건드리지 않는다. 옮기는 것뿐이라 잠금 상태는 그대로다 —
+    // 이관 전에 잠겨 있던 기기(저장분에 해시가 있던 기기)는 계속 잠기고, 안 잠겨 있던 기기는
+    // 옮길 값이 없으니 계속 안 잠긴다. 이관 때문에 잠기거나 풀리는 일은 없다.
+    // 바로 아래 되쓰기로 저장분에서는 해시가 사라진다(동기화 데이터에서 지운다).
+    if(!devicePasswordHash && loadReport.legacyPasswordHash){
+      setPersonalPasswordHash(loadReport.legacyPasswordHash);
+    }
+    // 고친 상태를 바로 되써 둔다(다음에 열 때는 정규화가 끝난 데이터에서 시작한다).
+    writeStorage(STORAGE_KEY, JSON.stringify(merged));
+    return merged;
   }
 
   var state = loadState();
@@ -770,8 +1197,14 @@
   MONTH_TABS.forEach(function(t){ state.monthByTab[t] = state.currentMonth; });
 
   function saveState(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
+    // 기기 저장분을 읽지 못한 상태에서는 아무것도 덮지 않는다. 사용자가 백업 파일을 가져올 때까지
+    // 이 빈 가계부가 원래 내용(과 동기화된 다른 기기 내용)을 밀어내지 못하게 막는 것이다.
+    if(storageUnreadable) return;
+    var ok = writeStorage(STORAGE_KEY, JSON.stringify(state));
+    // 기기 저장이 실패했는데 "마지막 저장 시각"만 새로 적으면, 다음에 열 때 내 기기가 더
+    // 최신인 줄 알고 클라우드의 멀쩡한 내용을 덮어쓴다. 그래서 성공했을 때만 적는다.
+    if(ok) writeStorage(SYNC_UPDATED_KEY, new Date().toISOString());
+    // 기기 저장이 실패해도 클라우드로는 보내본다. 둘 중 하나라도 남으면 기록은 살아있다.
     scheduleCloudPush();
   }
 
@@ -789,22 +1222,66 @@
   var lastPushedSnapshot = null;
   var realtimeChannel = null;
 
-  function getSyncCode(){ return localStorage.getItem(SYNC_CODE_KEY) || ""; }
+  // 동기화 코드 읽기/쓰기도 감싼다. getSyncCode()는 저장할 때마다 불리므로, 여기서 예외가
+  // 나면 저장 실패와 똑같이 뒤따르던 화면 갱신까지 함께 멈춘다.
+  function getSyncCode(){ return readStorage(SYNC_CODE_KEY) || ""; }
   function setSyncCode(code){
-    if(code) localStorage.setItem(SYNC_CODE_KEY, code);
-    else localStorage.removeItem(SYNC_CODE_KEY);
+    if(code) writeStorage(SYNC_CODE_KEY, code);
+    else { try{ localStorage.removeItem(SYNC_CODE_KEY); }catch(e){} }
   }
   function generateSyncCode(){
     return String(Math.floor(100000 + Math.random() * 900000));
   }
 
+  // 새 코드를 만들 때 겹치는 코드를 몇 번까지 다시 뽑아볼지. 필요하면 이 숫자만 바꾸면 된다.
+  var SYNC_CODE_MAX_ATTEMPTS = 10;
+
+  // 그 코드가 이미 쓰이고 있는지 확인한다. joinSyncCode()와 같은 조회 모양을 쓴다.
+  // true면 남이 쓰는 코드, false면 비어 있는 코드다. 확인 자체가 실패하면 실패로 넘긴다.
+  function isSyncCodeTaken(code){
+    // code 칸만 가져온다. select("*")로 가져오면 겹침을 확인하는 것만으로 그 코드를 쓰는
+    // 사람의 가계부 전체가 이 기기로 내려온다. 알아야 하는 것은 그 행이 있는지 뿐이다.
+    return supabaseClient.from("sync_data").select("code").eq("code", code).maybeSingle()
+      .then(function(res){
+        // 조회가 오류로 돌아오면 "비어 있다"고 볼 수 없다. 확인이 안 된 코드에 덮어쓰지
+        // 않도록 여기서 실패로 넘겨서, 부르는 쪽이 아무것도 쓰지 않게 만든다.
+        if(res.error) throw new Error(res.error.message || "코드 확인 실패");
+        return !!res.data;
+      });
+  }
+
+  // 비어 있는 코드를 찾을 때까지 다시 뽑는다. 한도까지 다 겹치면 빈 문자열을 돌려주고,
+  // 확인이 실패하면(오프라인 등) 실패로 넘긴다. 자리수는 6자리를 그대로 유지한다.
+  function findFreeSyncCode(attemptsLeft){
+    var code = generateSyncCode();
+    return isSyncCodeTaken(code).then(function(taken){
+      if(!taken) return code;
+      if(attemptsLeft <= 1) return "";
+      return findFreeSyncCode(attemptsLeft - 1);
+    });
+  }
+
   function scheduleCloudPush(){
+    if(storageUnreadable) return;
     if(!getSyncCode() || !supabaseClient) return;
     clearTimeout(pushDebounceTimer);
     pushDebounceTimer = setTimeout(pushStateToCloud, 800);
   }
 
+  // 앱이 닫히거나 백그라운드로 갈 때 쓴다. 800ms 묶음을 기다리다가 앱이 멈추면 마지막
+  // 수정이 클라우드로 못 올라가므로, 기다리지 않고 바로 한 번 흘려보낸다.
+  function flushCloudPush(){
+    if(storageUnreadable) return;
+    if(!getSyncCode() || !supabaseClient) return;
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = null;
+    pushStateToCloud();
+  }
+
   function pushStateToCloud(){
+    // 기기 저장분을 읽지 못한 상태에서는 빈 가계부를 클라우드로 올려 다른 기기 내용까지
+    // 덮어버리는 일이 없도록 아예 보내지 않는다.
+    if(storageUnreadable) return;
     var code = getSyncCode();
     if(!code || !supabaseClient) return;
     syncStatus.syncing = true;
@@ -834,24 +1311,17 @@
   }
 
   function applyRemoteState(remoteData){
-    var d = defaultState();
-    var merged = Object.assign(d, remoteData, {
-      accounts: remoteData.accounts || d.accounts,
-      logs: remoteData.logs || {},
-      savings: remoteData.savings || {},
-      savingsExpenses: remoteData.savingsExpenses || [],
-      living: remoteData.living || {},
-      loans: remoteData.loans || [],
-      utilities: remoteData.utilities || {},
-      fixedItemsByTab: remoteData.fixedItemsByTab || d.fixedItemsByTab,
-      // 어느 탭/몇 월을 보고 있는지는 기기별 화면 상태일 뿐이라 동기화 대상이 아니다.
-      // 원격 갱신을 받아도 지금 보고 있는 탭/월은 그대로 유지한다 (안 그러면 다른 기기나
-      // 남아있던 탭이 저축 탭에 있을 때 실시간 갱신이 올 때마다 현재 화면이 그쪽으로 튕겨나간다).
-      activeTab: state.activeTab,
-      currentMonth: state.currentMonth,
-      monthByTab: state.monthByTab
-    });
-    migrateReflectedFlags(merged);
+    // 받은 것이 가계부 상태가 아니면(null·배열·숫자 등) 아무것도 하지 않는다. 정규화에 그냥
+    // 넘기면 빈 가계부가 만들어져서, 멀쩡한 기기 내용을 그 빈 것으로 덮어쓰게 된다.
+    if(!isPlainObject(remoteData)) return;
+    // 클라우드에서 받은 데이터도 기기 저장분·백업 파일과 똑같은 정규화를 거친다.
+    var merged = normalizeState(remoteData);
+    // 어느 탭/몇 월을 보고 있는지는 기기별 화면 상태일 뿐이라 동기화 대상이 아니다.
+    // 원격 갱신을 받아도 지금 보고 있는 탭/월은 그대로 유지한다 (안 그러면 다른 기기나
+    // 남아있던 탭이 저축 탭에 있을 때 실시간 갱신이 올 때마다 현재 화면이 그쪽으로 튕겨나간다).
+    merged.activeTab = state.activeTab;
+    merged.currentMonth = state.currentMonth;
+    merged.monthByTab = state.monthByTab;
     // 개인 탭 잠금 화면에서 비밀번호를 입력하는 도중에는 다시 그리지 않는다.
     // render()는 main.innerHTML을 통째로 새로 만들기 때문에, 마침 그 사이에 다른 기기의
     // 동기화 갱신이 들어오면 입력 중이던 비밀번호 칸이 빈 칸으로 초기화돼 버린다.
@@ -863,8 +1333,13 @@
     var activeEl = document.activeElement;
     var isEditingField = !!(activeEl && root.contains(activeEl) && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA"));
     state = merged;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
+    // 기기 저장분을 읽지 못한 상태에서는 원문 자리를 건드리지 않는다. 받은 내용은 화면에만
+    // 반영하고, 되살리는 길은 백업 파일 가져오기로 남겨둔다.
+    if(!storageUnreadable){
+      if(writeStorage(STORAGE_KEY, JSON.stringify(state))){
+        writeStorage(SYNC_UPDATED_KEY, new Date().toISOString());
+      }
+    }
     if(!lockScreenShowing && !isEditingField) render();
   }
 
@@ -891,10 +1366,38 @@
 
   function createSyncCode(){
     if(!supabaseClient){ syncStatus.error = "동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해주세요."; renderSyncPanel(); return; }
-    var code = generateSyncCode();
+    // 기기 저장분을 읽지 못한 상태에서 새 코드를 만들면 빈 가계부가 클라우드에 올라간다.
+    if(storageUnreadable){
+      syncStatus.error = "저장된 내용을 읽지 못해서 지금은 동기화를 시작할 수 없어요.";
+      renderSyncPanel();
+      return;
+    }
     syncStatus.syncing = true;
     renderSyncPanel();
-    supabaseClient.from("sync_data").upsert({ code: code, data: state, updated_at: new Date().toISOString() })
+    // 코드를 쓰기 전에 남이 쓰고 있는지 먼저 확인한다. 확인 없이 덮어쓰면 같은 코드를
+    // 쓰던 사람의 가계부가 통째로 지워진다.
+    findFreeSyncCode(SYNC_CODE_MAX_ATTEMPTS)
+      .then(function(code){
+        if(!code){
+          // 한도까지 다 겹쳤다. 아무것도 쓰지 않고 안내만 한다.
+          syncStatus.syncing = false;
+          syncStatus.error = "코드를 만들지 못했어요. 잠시 뒤 다시 시도해주세요.";
+          renderSyncPanel();
+          return;
+        }
+        return writeNewSyncCode(code);
+      })
+      .catch(function(err){
+        // 겹침 확인이 실패했다(오프라인·요청 오류). 확인이 안 된 코드에는 절대 쓰지 않는다.
+        syncStatus.syncing = false;
+        syncStatus.error = "네트워크 연결을 확인해주세요.";
+        renderSyncPanel();
+      });
+  }
+
+  // 겹침 확인을 통과한 코드로만 행을 쓴다.
+  function writeNewSyncCode(code){
+    return supabaseClient.from("sync_data").upsert({ code: code, data: state, updated_at: new Date().toISOString() })
       .then(function(res){
         syncStatus.syncing = false;
         if(res.error){
@@ -918,6 +1421,14 @@
 
   function joinSyncCode(code){
     if(!supabaseClient){ uiFlags.syncJoinError = "동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해주세요."; renderSyncPanel(); return; }
+    // 기기 저장분을 읽지 못한 상태에서는 연결해도 받은 내용을 저장할 수 없다(그 상태에서는
+    // 저장을 막아 두었다). 막지 않으면 연결된 것처럼 보이고 화면도 바뀌는데 다시 열면 그대로
+    // 되돌아가, 되살린 줄 알았던 사용자가 더 헷갈린다. 되살리는 길은 백업 파일 가져오기다.
+    if(storageUnreadable){
+      uiFlags.syncJoinError = "저장된 내용을 읽지 못한 상태예요. 먼저 백업 파일을 가져와서 되살린 뒤에 연결해주세요.";
+      renderSyncPanel();
+      return;
+    }
     uiFlags.syncJoinError = "";
     syncStatus.syncing = true;
     renderSyncPanel();
@@ -1303,7 +1814,7 @@
     var panel = document.getElementById("mp-password-panel");
     if(!panel) return;
     if(!uiFlags.showPasswordSetup){ panel.innerHTML = ""; return; }
-    var hasPw = !!state.personalPasswordHash;
+    var hasPw = !!getPersonalPasswordHash();
     var mode = uiFlags.passwordModalMode || (hasPw ? "menu" : "set");
     var body = "";
     if(mode === "menu"){
@@ -1381,7 +1892,7 @@
   }
 
   function getSavingsMonth(key){
-    if(!state.savings[key]) state.savings[key] = { amount: 0, interest: 0, eventCost: 0, tx: [] };
+    if(!state.savings[key]) state.savings[key] = defaultSavingsMonth();
     return state.savings[key];
   }
   function savingsTxTotal(sm){
@@ -1410,11 +1921,11 @@
     return { pct: pct, cls: cls };
   }
   function getLivingMonth(key){
-    if(!state.living[key]) state.living[key] = { budget: 0, tx: [] };
+    if(!state.living[key]) state.living[key] = defaultLivingMonth();
     return state.living[key];
   }
   function getUtilityMonth(key){
-    if(!state.utilities[key]) state.utilities[key] = { payDate: "", community: 0, electricity: 0, water: 0, heating: 0, other: 0 };
+    if(!state.utilities[key]) state.utilities[key] = defaultUtilityMonth();
     return state.utilities[key];
   }
   function utilityTotal(u){
@@ -1426,11 +1937,29 @@
     if(!container) return;
     var um = getUtilityMonth(state.currentMonth);
     var dateInput = container.querySelector('[data-field="payDate"]');
-    if(dateInput) um.payDate = parseDotDateToISO(dateInput.value) || "";
+    // 날짜 칸은 8자리가 다 채워져 유효할 때만 저장한다. 중간 상태를 저장하면 이미 적어둔
+    // 납부일자가 지워진다. 무효하면 저장된 값을 그대로 둔다.
+    if(dateInput){
+      var pendingPayDate = parseDotDateToISO(dateInput.value);
+      if(pendingPayDate) um.payDate = pendingPayDate;
+    }
     ["community","electricity","water","heating","other"].forEach(function(f){
       var input = container.querySelector('[data-field="' + f + '"]');
       if(input) um[f] = Math.abs(parseMoneyValue(input.value));
     });
+  }
+  // 관리비 저장 표시를 잠깐 켠다. 치는 도중에도 불리므로 화면을 다시 그리지 않고
+  // 클래스만 토글한다(입력칸 노드를 새로 만들면 아이폰 키보드가 내려간다).
+  var utilSavedFlashTimer = null;
+  function showUtilitySavedFlash(){
+    var flashEl = document.getElementById("mp-util-saved");
+    if(!flashEl) return;
+    flashEl.classList.add("is-on");
+    clearTimeout(utilSavedFlashTimer);
+    utilSavedFlashTimer = setTimeout(function(){
+      var stillEl = document.getElementById("mp-util-saved");
+      if(stillEl) stillEl.classList.remove("is-on");
+    }, 1400);
   }
   function updateUtilityDisplay(){
     var mk = state.currentMonth;
@@ -1455,12 +1984,16 @@
     var container = document.querySelector("#mp-main .mp-account.is-expanded");
     if(!container) return;
     var sm = getSavingsMonth(state.currentMonth);
+    // 마이너스를 넣을 수 있는 금액칸은 개인 탭 '기준 잔액' 하나뿐이다(± 버튼으로 뒤집는다).
+    // 저축 세 칸·생활비 기준 금액·대출 금액/월 상환액은 모두 양수만이다. 입력 중 화면은
+    // 이미 Math.abs로 보여주고 있었는데 저장 쪽에만 부호가 남아, 손을 떼는 순간 값이
+    // 마이너스로 튀었다. 그래서 저장하는 자리도 전부 양수로 맞춘다.
     var amountInput = container.querySelector('[data-action="set-savings-amount"]');
-    if(amountInput) sm.amount = parseMoneyValue(amountInput.value);
+    if(amountInput) sm.amount = Math.abs(parseMoneyValue(amountInput.value));
     var interestInput = container.querySelector('[data-action="set-savings-interest"]');
-    if(interestInput) sm.interest = parseMoneyValue(interestInput.value);
+    if(interestInput) sm.interest = Math.abs(parseMoneyValue(interestInput.value));
     var eventInput = container.querySelector('[data-action="set-savings-event"]');
-    if(eventInput) sm.eventCost = parseMoneyValue(eventInput.value);
+    if(eventInput) sm.eventCost = Math.abs(parseMoneyValue(eventInput.value));
   }
   function updateSavingsDisplay(){
     var mk = state.currentMonth;
@@ -1524,7 +2057,7 @@
     if(!loLive) return;
     var origInput = loanCard.querySelector('[data-action="set-loan-original"]');
     var instInput = loanCard.querySelector('[data-action="set-loan-installment"]');
-    var liveOriginal = origInput ? parseMoneyValue(origInput.value) : loLive.originalAmount;
+    var liveOriginal = origInput ? Math.abs(parseMoneyValue(origInput.value)) : loLive.originalAmount;
     var liveInstallment = instInput ? Math.max(0, parseInt(instInput.value, 10) || 0) : loLive.currentInstallment;
     var liveRepaid = liveInstallment * Number(loLive.monthlyPayment||0);
     var liveRemaining = liveOriginal - liveRepaid;
@@ -1563,7 +2096,7 @@
     var loan = state.loans.find(function(l){ return l.id === expandedLoanId; });
     if(!loan) return;
     var originalInput = document.querySelector('[data-action="set-loan-original"][data-id="' + expandedLoanId + '"]');
-    if(originalInput) loan.originalAmount = parseMoneyValue(originalInput.value);
+    if(originalInput) loan.originalAmount = Math.abs(parseMoneyValue(originalInput.value));
     var installmentInput = document.querySelector('[data-action="set-loan-installment"][data-id="' + expandedLoanId + '"]');
     if(installmentInput) loan.currentInstallment = Math.max(0, parseInt(installmentInput.value, 10) || 0);
   }
@@ -1608,7 +2141,7 @@
     if(!container) return;
     var lm = getLivingMonth(state.currentMonth);
     var budgetInput = container.querySelector('[data-action="set-living-budget"]');
-    if(budgetInput) lm.budget = parseMoneyValue(budgetInput.value);
+    if(budgetInput) lm.budget = Math.abs(parseMoneyValue(budgetInput.value));
   }
   function updateLivingDisplay(){
     var mk = state.currentMonth;
@@ -1633,6 +2166,14 @@
       if(fillEl) fillEl.style.width = pct + "%";
     }
   }
+  // 지금 보고 있는 달의 생활비 내역 중 이 줄이 이월로 만들어진 것이면 짝 표식을 돌려준다.
+  // 삭제 확인 문구와 실제 삭제가 같은 판단을 쓰도록 한 군데로 모아둔다.
+  function livingTxCarryPairId(txId){
+    var lm = getLivingMonth(state.currentMonth);
+    var t = (lm.tx || []).find(function(x){ return x.id === txId; });
+    return (t && typeof t.carryPairId === "string" && t.carryPairId) ? t.carryPairId : "";
+  }
+
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
     return state.logs[accountId];
@@ -1646,8 +2187,43 @@
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
+  // "잠긴 동안" — 이 기기에 비밀번호가 걸려 있고 아직 풀지 않은 동안. 어느 탭에 있든 참이다.
+  // 개인 탭을 벗어나면 personalUnlocked가 다시 false가 되므로, 다른 탭에서도 계속 잠긴 상태다.
+  // 아래 onPersonalLockScreen()은 "지금 잠금 화면이 떠 있는가"라는 더 좁은 물음이다. 내보내기·
+  // 가져오기 차단에 좁은 쪽을 쓰면 탭 하나만 눌러 나간 뒤 그대로 내보낼 수 있어 막는 뜻이 없다.
+  function personalLocked(){
+    return !!getPersonalPasswordHash() && !personalUnlocked;
+  }
+
   function onPersonalLockScreen(){
-    return state.activeTab === "personal" && !!state.personalPasswordHash && !personalUnlocked;
+    return state.activeTab === "personal" && personalLocked();
+  }
+
+  // 잠긴 동안에는 내보내기·가져오기 버튼을 숨긴다. 잠금 화면에서 내보내기를 누르면 개인 탭
+  // 내용까지 파일로 다 나가기 때문이다. 동기화와 계산기는 막지 않는다 — 새 기기에서는 연결부터
+  // 해야 하는 경우가 있어서다.
+  //
+  // 안내 화면은 유일한 예외로, 잠겨 있어도 되살릴 길을 열어둔다. 그 화면에서는 잠금 화면이
+  // 나올 자리가 없어 비밀번호를 풀 방법이 없다. 가져오기까지 막으면 백업 파일로 되살릴 길이
+  // 사라져, 기기 데이터를 통째로 지우는 것 말고는 방법이 없다. 가져오기는 파일을 집어넣는
+  // 동작이라 개인 탭 내용이 밖으로 나가지 않으므로, 잠금이 실제로 막아야 하는 것을 약하게
+  // 만들지 않는다.
+  //
+  // 안내 화면이 뜨는 길은 두 가지다: 저장된 원문을 읽지 못한 경우(storageUnreadable)와,
+  // 그리기가 예외로 실패한 경우. 예전에는 앞의 것만 예외로 봐서, 그리기가 실패하고 비밀번호가
+  // 걸린 기기는 가져오기도 막히고 잠금도 풀 수 없는 막다른 골목에 빠졌다. 그래서 "안내 화면이
+  // 떠 있는지"를 기준으로 삼는다.
+  var errorScreenShowing = false;
+  function importUnlocked(){
+    return !personalLocked() || errorScreenShowing;
+  }
+  function syncBackupButtonsHidden(){
+    // 내보내기는 내용이 밖으로 나가는 동작이라 잠긴 동안에는 예외 없이 막는다. 안내 화면에는
+    // 원문을 그대로 내려받는 자체 내보내기(export-storage-raw)가 있어 되살릴 길은 남는다.
+    var expBtn = document.getElementById("mp-export-btn");
+    if(expBtn) expBtn.hidden = personalLocked();
+    var impBtn = document.getElementById("mp-import-btn");
+    if(impBtn) impBtn.hidden = !importUnlocked();
   }
 
   function sha256Hex(text){
@@ -1714,14 +2290,59 @@
     if(p.length !== 3) return iso;
     return p[0] + "." + p[1] + "." + p[2];
   }
+  // 날짜 칸의 "2026.02.31" 같은 값을 ISO 날짜로 바꾼다.
+  // - 8자리(YYYYMMDD)가 다 채워지지 않으면 null을 돌려준다. "치는 도중"(2026, 2026.1 …)은
+  //   전부 여기에 걸리므로, 부르는 쪽은 null이면 저장하지 말고 이전 값을 되돌려야 한다.
+  //   이미 적어둔 날짜가 중간 상태 때문에 지워지면 안 되기 때문이다.
+  // - 월은 1~12, 일은 그 달의 마지막 날을 넘지 않게 맞춘다(2월 31일 → 2월 28/29일).
   function parseDotDateToISO(str){
     var digits = String(str||"").replace(/[^0-9]/g, "").slice(0,8);
     if(digits.length < 8) return null;
     var y = digits.slice(0,4);
     var mo = Math.min(12, Math.max(1, parseInt(digits.slice(4,6),10) || 1));
-    var da = Math.min(31, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
+    var mk = y + "-" + String(mo).padStart(2,"0");
+    // 그 달의 마지막 날은 이미 있는 lastDayOfMonth()로 구한다(윤년 계산을 두 번 적지 않는다).
+    var maxDay = parseInt(String(lastDayOfMonth(mk)).split("-")[2], 10) || 31;
+    var da = Math.min(maxDay, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
     return y + "-" + String(mo).padStart(2,"0") + "-" + String(da).padStart(2,"0");
   }
+  // 내역 목록 정렬 비교기. 같은 데이터로 두 번 그리면 순서가 완전히 같아야 한다.
+  // desc=true면 최신순(날짜 내림차순), false면 과거순.
+  // 규칙
+  //  1) 날짜가 빈 기록은 방향과 상관없이 목록 맨 끝에 둔다.
+  //  2) 날짜는 ISO 문자열이라 사전순 비교가 곧 날짜 비교다.
+  //  3) 같은 날짜면 ts(적은 순서)로 가른다. ts가 없는 예전 기록은 "먼저 적은 것"으로 본다 —
+  //     최신순에선 ts 있는 쪽이 위, 과거순에선 ts 없는 쪽이 위다.
+  //  4) 더 가를 것이 없으면 0을 돌려준다. Array.prototype.sort는 안정 정렬이라
+  //     0이면 배열에 담긴(= 저장된) 순서가 그대로 유지된다.
+  // ts를 뺄셈(b.ts - a.ts)으로 비교하면 ts가 없는 기록에서 NaN이 나와 비교 자체가 망가진다.
+  // 그래서 아래처럼 뺄셈 없이 크고 작음만 따진다.
+  function compareTxForList(a, b, desc){
+    var da = (a && typeof a.date === "string") ? a.date : "";
+    var db = (b && typeof b.date === "string") ? b.date : "";
+    if(!da || !db){
+      if(!da && !db) return 0;
+      return da ? -1 : 1;
+    }
+    if(da !== db){
+      if(desc) return da < db ? 1 : -1;
+      return da < db ? -1 : 1;
+    }
+    var hasA = a && typeof a.ts === "number" && isFinite(a.ts);
+    var hasB = b && typeof b.ts === "number" && isFinite(b.ts);
+    if(!hasA && !hasB) return 0;
+    if(hasA !== hasB){
+      if(desc) return hasA ? -1 : 1;
+      return hasA ? 1 : -1;
+    }
+    if(a.ts === b.ts) return 0;
+    if(desc) return a.ts < b.ts ? 1 : -1;
+    return a.ts < b.ts ? -1 : 1;
+  }
+  function txListComparator(desc){
+    return function(a, b){ return compareTxForList(a, b, desc); };
+  }
+
   function formatDateDotsRaw(raw){
     var digits = String(raw||"").replace(/[^0-9]/g, "").slice(0,8);
     var parts = [];
@@ -1777,6 +2398,11 @@
     return Math.max(4, width) + "ch";
   }
 
+  // 마이너스를 그대로 두는 금액칸. 지금은 개인 탭 '기준 잔액'뿐이고, 여기에만 ± 버튼이 있다.
+  // (아이폰 숫자 키패드에 - 키가 없어서 버튼으로 뒤집는다.) 이 목록에 없는 금액칸은
+  // 화면·저장·다시 읽기 세 곳에서 모두 양수다.
+  var POSITIVE_ONLY_MONEY_EXEMPT = { "set-balance": true };
+
   function parseMoneyValue(raw){
     raw = String(raw == null ? "" : raw);
     var negative = /^\s*-/.test(raw);
@@ -1800,6 +2426,26 @@
   window.addEventListener("orientationchange", updateStickyOffset);
 
   function render(){
+    // 기기 저장분을 읽지 못했을 때는 가계부 대신 안내 화면을 그린다.
+    if(storageUnreadable && renderStorageErrorScreen()) return;
+    try{
+      drawApp();
+    }catch(err){
+      // 어느 탭의 그리기든 예상 못한 오류로 멈추면, 예전에는 빈 화면이나 반쯤 그려진 화면이
+      // 남았다. 그 자리에 안내 화면을 대신 띄운다. 원인을 찾을 수 있게 콘솔에는 남긴다.
+      if(window.console && console.error) console.error("화면 그리기 실패", err);
+      // 안내 화면을 그리다 또 터지면 renderStorageErrorScreen()이 빗장을 걸고 false를
+      // 돌려준다. 여기서 다시 부르지 않으므로 같은 자리를 맴돌지 않는다.
+      if(!renderStorageErrorScreen()){
+        showNotice("화면을 그리는 중 문제가 생겼어요. 앱을 다시 열어주세요.");
+      }
+    }
+  }
+
+  function drawApp(){
+    // 정상적으로 가계부를 그리기 시작했으니 안내 화면은 더 떠 있지 않다. 여기서 내려야
+    // 잠긴 상태의 가져오기 예외가 안내 화면에만 걸린다(importUnlocked 주석 참고).
+    errorScreenShowing = false;
     headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
     main.classList.toggle("mp-util-tight-top", state.activeTab === "utility");
     document.querySelectorAll(".mp-tab").forEach(function(btn){
@@ -1813,6 +2459,7 @@
       lfBtn.hidden = hideLfBtn;
       if(hideLfBtn && uiFlags.showFixedItems) uiFlags.showFixedItems = false;
     }
+    syncBackupButtonsHidden();
     // 고정내역은 탭마다 목록이 다르므로, 열려있는 동안 탭/데이터가 바뀌면 다시 그린다.
     // 단, 그 안의 입력칸을 쓰고 있는 중이면 건드리지 않는다(포커스가 빠지기 때문).
     var fixedPanelEl = document.getElementById("mp-fixed-panel");
@@ -1885,7 +2532,7 @@
   }
 
   function renderPersonal(){
-    if(state.personalPasswordHash && !personalUnlocked){
+    if(personalLocked()){
       return renderPersonalLockScreen();
     }
     var html = "";
@@ -1905,7 +2552,7 @@
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
           '</form>' :
           '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>')) +
-      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (state.personalPasswordHash ? '🔒' : '🔓') + '</button>' +
+      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (getPersonalPasswordHash() ? '🔒' : '🔓') + '</button>' +
       '</div>';
 
     if(expandedAcc){
@@ -1989,10 +2636,7 @@
     if(expandedAcc){
       var log = getLog(expandedAcc.id);
       var sortDesc = uiFlags.logSortOrder !== "asc";
-      var sorted = log.slice().sort(function(a,b){
-        var d = sortDesc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
-        return d !== 0 ? d : (sortDesc ? b.ts - a.ts : a.ts - b.ts);
-      });
+      var sorted = log.slice().sort(txListComparator(sortDesc));
 
       html += '<div class="mp-card mp-log-card">' +
         (log.length ?
@@ -2069,7 +2713,7 @@
   }
   // 사용 내역을 분류별로 묶고, 묶음마다 소계를 보여준다.
   function savingsUsedDetailHTML(sm){
-    var list = (sm.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var list = (sm.tx || []).slice().sort(txListComparator(true));
     if(!list.length) return '<div class="mp-sv-used-detail"><div class="mp-empty">이번 달 사용 내역이 없어요</div></div>';
     var order = [];
     var buckets = {};
@@ -2185,7 +2829,7 @@
     var remain = Number(m.budget||0) - spent + received;
     var bar = livingBarState(m.budget, spent, received);
     var pct = bar.pct, barClass = bar.cls;
-    var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var txSorted = m.tx.slice().sort(txListComparator(true));
 
     return '<div class="mp-tab-sticky">' +
       '<div class="mp-month-switch">' +
@@ -2379,7 +3023,9 @@
         : '') +
         '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
         '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
-        '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
+        // 저장 버튼은 없앴다. 금액 다섯 칸은 치는 도중에도 저장되고 납부일자는 손 뗄 때
+        // 저장되므로, 누를 일이 없는 버튼이 됐다. 대신 여기에 저장 표시만 남긴다.
+        '<div class="mp-save-flash" id="mp-util-saved" aria-live="polite">저장됨 ✓</div>' +
       '</section>' +
     '</div>' +
       (hasAnyUtilityData() ? utilityChartSectionHTML(mk, chartField) : "");
@@ -2508,7 +3154,61 @@
     return html;
   }
 
+  // 내려받기는 두 자리에서 쓴다(헤더의 내보내기, 안내 화면의 내보내기). 파일 이름 규칙이
+  // 갈라지지 않도록 한 곳에 모아 둔다.
+  function downloadBackupFile(text){
+    var blob = new Blob([text], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "moneyplanner-backup-" + todayISO + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
   // ---------- events ----------
+
+  // 입력칸에 값이 남아 있는 채로 앱이 백그라운드로 가거나 닫히면, 마지막 값을 마무리
+  // 저장한다. 저장 범위는 탭을 옮길 때 저장하는 것과 똑같다(관리비·생활비 기준 금액·
+  // 저축 3칸·개인 탭 기준 잔액·대출 금액/회차).
+  // 아이폰 사파리는 홈 화면으로 나갈 때 beforeunload를 부르지 않는 경우가 많아,
+  // 실제로 불리는 visibilitychange(hidden)와 pagehide를 쓴다.
+  var leaveFlushed = false;
+  function flushPendingBeforeLeave(){
+    // 두 이벤트가 연달아 오면 같은 저장을 두 번 하게 되므로 한 번만 하도록 잠근다.
+    if(leaveFlushed) return;
+    leaveFlushed = true;
+    // 아직 커밋되지 않은 입력이 있는지 보려면 커밋 전후를 비교해야 한다.
+    var before = null;
+    try{ before = JSON.stringify(state); }catch(e){ before = null; }
+    commitPendingUtilityFields();
+    commitPendingSavingsFields();
+    commitPendingLivingFields();
+    commitPendingLoanFields();
+    commitPendingPersonalFields();
+    var changed = true;
+    if(before !== null){
+      try{ changed = JSON.stringify(state) !== before; }catch(e){ changed = true; }
+    }
+    // 고친 게 없으면 저장하지 않는다. 그냥 앱을 열었다 다른 앱으로 넘어가는 것만으로도
+    // 저장 시각이 갱신되면, 이 기기가 "가장 최신"으로 표시된다. 그 상태에서 앱을 열 때
+    // 하는 시각 비교(initSync)가 이 기기 쪽을 이기게 만들어, 다른 기기에서 더 나중에 고친
+    // 내용을 오래된 내용으로 덮어쓴다. 고친 게 있을 때만 저장하고 올린다.
+    // 저장이 막힌 상태(기기 저장분을 읽지 못한 경우)는 saveState()가 알아서 걸러낸다.
+    if(changed) saveState();
+    // 클라우드 전송은 올릴 것이 실제로 예약돼 있을 때만 흘려준다. 그것이 800ms 묶음 때문에
+    // 마지막 수정이 못 올라가는 문제이고, 그 밖의 경우에 굳이 올릴 이유가 없다.
+    if(changed || pushDebounceTimer) flushCloudPush();
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) flushPendingBeforeLeave();
+    // 다시 돌아왔으면 잠금을 풀어, 또 나갈 때 한 번 더 마무리 저장할 수 있게 한다.
+    else leaveFlushed = false;
+  });
+  window.addEventListener("pagehide", function(){ flushPendingBeforeLeave(); });
+
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
       if(btn.dataset.tab === state.activeTab) return;
@@ -2539,7 +3239,13 @@
     var action = el.dataset.action;
 
     if(action.indexOf("delete-") === 0){
-      if(!confirm(DELETE_CONFIRM_TEXT[action] || "정말 삭제할까요?")) return;
+      // 이월로 만들어진 줄은 짝과 함께 사라진다. 다른 달에 있는 줄까지 없어지는데
+      // "이 내역을 삭제할까요?"만 뜨면 모르고 지우게 되므로, 그때는 따로 알려준다.
+      var confirmText = DELETE_CONFIRM_TEXT[action] || "정말 삭제할까요?";
+      if(action === "delete-living-tx" && livingTxCarryPairId(el.dataset.id)){
+        confirmText = "이 내역은 이월로 만들어진 줄이에요. 지우면 짝이 되는 다른 달의 줄도 함께 사라지고, 두 달의 잔액이 이월 전으로 돌아가요. 삭제할까요?";
+      }
+      if(!confirm(confirmText)) return;
     }
 
     if(action === "toggle-sync-panel"){
@@ -2640,20 +3346,52 @@
     }
 
     if(action === "export-data"){
-      var exportStr = localStorage.getItem(STORAGE_KEY) || JSON.stringify(state);
-      var blob = new Blob([exportStr], { type: "application/json" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "moneyplanner-backup-" + todayISO + ".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      // 버튼은 이미 숨겨두지만, 잠긴 동안에는 눌려도 나가지 않게 여기서도 한 번 더 막는다.
+      if(personalLocked()){ showNotice("개인 탭 비밀번호를 푼 뒤에 내보낼 수 있어요."); return; }
+      var exportStr = readStorage(STORAGE_KEY) || JSON.stringify(state);
+      downloadBackupFile(exportStr);
+      return;
+    }
+
+    // ========================================================================
+    // 안내 화면의 내보내기 — 개인 탭 잠금 차단의 "유일한 예외"
+    //
+    // 뒤 작업에서 "개인 탭이 잠겨 있으면 내보내기를 막는다"는 규칙이 들어온다.
+    // 그 규칙을 이 경로(export-storage-raw)에는 걸지 않는다. 화면이 깨진 상황에서는
+    // 데이터를 살리는 것이 먼저이기 때문이다. 평상시 화면의 내보내기(위 export-data)에는
+    // 그 규칙을 그대로 적용한다. 예외는 여기 한 곳뿐이다.
+    //
+    // 또 하나: 이 내보내기는 화면 그리기 결과나 state에 기대지 않는다. 그리기가 실패한
+    // 상태에서도 기기에 저장된 원문(읽을 수 없을 때 따로 보관해 둔 원문이 있으면 그것)을
+    // 그대로 내려받는다.
+    // ========================================================================
+    if(action === "export-storage-raw"){
+      var info = storageErrorInfo();
+      var rawOut = null;
+      // 읽을 수 없는 원문을 다른 자리에 복사해 두었으면 그 복사본이 우선이다.
+      if(info && info.preserved && info.backupKey) rawOut = readStorage(info.backupKey);
+      // 복사가 실패했더라도(공간 부족 등) 원문은 원래 자리에 그대로 있다.
+      if(rawOut === null) rawOut = readStorage(STORAGE_KEY);
+      if(rawOut === null || rawOut === ""){
+        showNotice("이 기기에 저장된 내용이 없어요.");
+        return;
+      }
+      downloadBackupFile(rawOut);
+      return;
+    }
+
+    if(action === "retry-render"){
+      // 기기 저장분을 읽지 못한 경우에는 다시 그려봐야 그대로다(원문은 앱을 열 때 한 번만
+      // 읽는다). 그 사이 백업을 가져왔을 수도 있으니 페이지를 새로 불러온다.
+      if(storageUnreadable){ location.reload(); return; }
+      // 그리기가 잠깐 터진 경우라면 다시 그려보는 것만으로 돌아온다.
+      render();
       return;
     }
 
     if(action === "trigger-import"){
+      // 안내 화면에서는 잠금을 풀 방법이 없으므로 가져오기를 열어둔다(위 importUnlocked 주석).
+      if(!importUnlocked()){ showNotice("개인 탭 비밀번호를 푼 뒤에 가져올 수 있어요."); return; }
       var fileInput = document.getElementById("mp-import-input");
       if(fileInput) fileInput.click();
       return;
@@ -2665,23 +3403,46 @@
       // 예전에는 '이월했다'는 표시만 따로 남겼는데, 다음 달의 이월 내역을 지워도 그 표시는
       // 남아 있어서 이월한 적이 없는데도 이미 했다고 막히곤 했다. 이제 다음 달에 이 달에서
       // 넘어간 내역이 실제로 있는지를 보고 판단한다.
-      var carriedTarget = getLivingMonth(shiftMonth(srcKey, 1));
-      var alreadyCarried = (carriedTarget.tx || []).some(function(t){ return t.carryFrom === srcKey; });
-      if(alreadyCarried){ alert("이미 이번 달 잔액을 다음 달로 이월했어요."); return; }
       var spentX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="expense" ? s + Number(t.amount||0) : s; }, 0);
       var receivedX = srcMonth.tx.reduce(function(s,t){ return (t.type||"expense")==="income" ? s + Number(t.amount||0) : s; }, 0);
       var remainX = Number(srcMonth.budget||0) - spentX + receivedX;
+      // 잔액을 먼저 본다. 이월하면 원래 달에 상쇄 줄이 들어가 잔액이 0원이 되므로, 다시
+      // 눌러도 여기서 막힌다. 그래서 같은 달을 두 번 이월해 돈이 두 번 빠지는 일이 없다.
       if(remainX <= 0){ alert("이월할 잔액이 없어요."); return; }
+      // 아래 안내는 상쇄 줄이 없는 예전 형식 기록(다음 달 줄만 있고 원래 달 잔액은 그대로
+      // 남아 있는 경우)을 위해 그대로 남겨둔다. 그때는 잔액이 남아 있어 위 안내에 안 걸린다.
+      var carriedTarget = getLivingMonth(shiftMonth(srcKey, 1));
+      var alreadyCarried = (carriedTarget.tx || []).some(function(t){ return t.carryFrom === srcKey; });
+      if(alreadyCarried){ alert("이미 이번 달 잔액을 다음 달로 이월했어요."); return; }
       if(!confirm(monthLabel(srcKey) + '의 잔액 ' + won(remainX) + '을(를) 다음 달로 이월할까요?')) return;
       var nextKey = shiftMonth(srcKey, 1);
       var nextMonth = getLivingMonth(nextKey);
+      // 이월은 항상 두 줄이 한 쌍이다. 같은 carryPairId를 달아 두 줄을 묶는다.
+      // carryFrom("어느 달에서 넘어왔는지")은 이월 여부를 따지는 기존 표식이라 그대로 두고,
+      // 짝짓기는 이 새 칸만 쓴다. 두 용도를 한 칸에 섞지 않는다.
+      var carryPairId = uid();
       nextMonth.tx.push({
         id: uid(),
-        date: lastDayOfMonth(srcKey),
+        // 넘어간 돈은 다음 달 1일에 들어온다. 예전에는 원래 달 마지막 날이라 다음 달 목록에서
+        // 지난달 날짜로 보였다.
+        date: nextKey + "-01",
         memo: monthLabel(srcKey) + ' 이월',
         amount: remainX,
         type: "income",
-        carryFrom: srcKey
+        carryFrom: srcKey,
+        carryPairId: carryPairId,
+        ts: Date.now()
+      });
+      // 원래 달에는 같은 금액의 지출 줄을 넣는다. 계산식을 손대지 않고도 원래 달 잔액이
+      // 0원이 되고, 왜 0원인지도 목록에서 바로 보인다.
+      srcMonth.tx.push({
+        id: uid(),
+        date: lastDayOfMonth(srcKey),
+        memo: monthLabel(nextKey) + '로 이월',
+        amount: remainX,
+        type: "expense",
+        carryPairId: carryPairId,
+        ts: Date.now()
       });
       delete srcMonth.carriedOver;
       saveState(); render();
@@ -2797,7 +3558,7 @@
       var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
       if(pendingLoan){
         var pendingOriginalInput = main.querySelector('[data-action="set-loan-original"][data-id="' + toggleLoanId + '"]');
-        if(pendingOriginalInput) pendingLoan.originalAmount = parseMoneyValue(pendingOriginalInput.value);
+        if(pendingOriginalInput) pendingLoan.originalAmount = Math.abs(parseMoneyValue(pendingOriginalInput.value));
         var pendingInstallmentInput = main.querySelector('[data-action="set-loan-installment"][data-id="' + toggleLoanId + '"]');
         if(pendingInstallmentInput) pendingLoan.currentInstallment = Math.max(0, parseInt(pendingInstallmentInput.value, 10) || 0);
       }
@@ -2837,23 +3598,26 @@
 
     if(action === "delete-living-tx"){
       var lm = getLivingMonth(state.currentMonth);
-      lm.tx = lm.tx.filter(function(t){ return t.id !== el.dataset.id; });
+      // 이월 짝 표식이 있는 줄은 짝도 같이 지운다. 한쪽만 남으면 다음 달에는 돈이 들어온
+      // 채로, 원래 달은 빠져나간 채로 남아 장부가 어긋난다. 짝은 다른 달에 있으니 달 묶음을
+      // 전부 훑는다. 표식이 없는 예전 이월 줄은 짝이 없으므로 그 줄만 지운다 — 예전 기록을
+      // 건드리지 않는다는 규칙이 먼저다.
+      var delPairId = livingTxCarryPairId(el.dataset.id);
+      if(delPairId){
+        Object.keys(state.living).forEach(function(pk){
+          var pb = state.living[pk];
+          if(!pb || !Array.isArray(pb.tx)) return;
+          pb.tx = pb.tx.filter(function(t){ return t.carryPairId !== delPairId; });
+        });
+      } else {
+        lm.tx = lm.tx.filter(function(t){ return t.id !== el.dataset.id; });
+      }
       saveState(); render(); return;
     }
 
     if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
     if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
-    if(action === "save-utility"){
-      commitPendingUtilityFields();
-      saveState();
-      updateUtilityDisplay();
-      var savedLabel = el.textContent;
-      el.textContent = "저장됨 ✓";
-      el.disabled = true;
-      setTimeout(function(){ el.textContent = savedLabel; el.disabled = false; }, 1200);
-      return;
-    }
     if(action === "set-utility-chart-field"){
       uiFlags.utilityChartField = el.dataset.field;
       render();
@@ -2926,10 +3690,18 @@
   root.addEventListener("input", function(e){
     var el = e.target;
     if(el.classList && el.classList.contains("mp-unlock-input")){
+      // 다시 입력하기 시작하면 틀렸다는 안내를 지운다. 이때 화면을 통째로 다시 그리면 입력칸
+      // DOM이 새로 만들어져 치던 비밀번호가 지워지고 키패드가 내려간다(실시간 동기화 갱신이
+      // 잠금 화면에서 다시 그리기를 피하는 것과 같은 이유다). 그래서 안내 문구만 걷어낸다.
+      if(uiFlags.passwordError){
+        uiFlags.passwordError = "";
+        var lockErrEl = document.querySelector(".mp-lock-screen .mp-sync-status.err");
+        if(lockErrEl && lockErrEl.parentNode) lockErrEl.parentNode.removeChild(lockErrEl);
+      }
       var tryVal = el.value;
       if(tryVal.length >= 4){
         sha256Hex(tryVal).then(function(hash){
-          if(hash === state.personalPasswordHash){
+          if(hash === getPersonalPasswordHash()){
             personalUnlocked = true;
             uiFlags.passwordError = "";
             render();
@@ -2938,6 +3710,11 @@
       }
       return;
     }
+    // 날짜 칸(.mp-date-input)은 "치는 도중 저장"(input에서 바로 saveState) 대상이 아니다.
+    // 여기서는 점만 끼워 넣어 보이게 다듬고, 저장은 change/focusout에서 8자리가 다 채워져
+    // parseDotDateToISO()가 유효한 값을 줄 때만 한다. 중간 상태(2026, 2026.1 …)를 저장하면
+    // 이미 적어둔 날짜가 지워지기 때문이다. 금액 칸에 치는 도중 저장을 넣더라도
+    // 이 분기에는 saveState()를 붙이지 말 것.
     if(el.classList && el.classList.contains("mp-date-input")){
       var dCaret = el.selectionStart;
       var dOldVal = el.value;
@@ -2960,6 +3737,11 @@
     if(!el.classList || !el.classList.contains("mp-money")) return;
     var caret = el.selectionStart;
     var oldVal = el.value;
+    // 마이너스를 받는 금액칸은 개인 탭 '기준 잔액' 하나뿐이다. 나머지 칸은 저장할 때
+    // 양수로 바꾸는데, 입력칸 글자에 마이너스가 남아 있으면 화면과 저장값이 달라 보인다
+    // (아이폰 키패드에 - 키가 없어 붙여넣기로만 들어오지만, 들어오면 그대로 보였다).
+    // 그래서 부호를 받지 않는 칸은 치는 즉시 마이너스를 떼어낸다.
+    if(!POSITIVE_ONLY_MONEY_EXEMPT[el.dataset.action]) oldVal = oldVal.replace(/-/g, "");
     var digitsBefore = (oldVal.slice(0, caret).match(/[0-9]/g) || []).length;
     var negative = /^\s*-/.test(oldVal);
     var formatted = formatNumberString(oldVal);
@@ -2984,6 +3766,11 @@
       var totalElLive = document.querySelector("#mp-main .mp-hero .mp-total");
       if(totalElLive) totalElLive.textContent = won(utilityTotal(umLive));
       liveUtilityChartPatch();
+      // 치는 도중에도 기기에 저장한다. 예전에는 화면 합계만 바뀌고 저장은 안 돼서,
+      // 저장된 것처럼 보이는 채로 앱을 닫으면 방금 친 금액이 사라졌다.
+      // saveState()는 화면을 다시 그리지 않으므로 이 입력칸 노드와 커서는 그대로 남는다.
+      saveState();
+      showUtilitySavedFlash();
     }
 
     if(el.dataset.action === "edit-lf-amount"){
@@ -2991,6 +3778,8 @@
       if(lfItemLive){
         lfItemLive.amount = Math.abs(parseMoneyValue(el.value));
         updateFixedItemsTotal();
+        // 고정내역 금액도 관리비와 같은 경로였다(화면 합계만 갱신). 같이 저장한다.
+        saveState();
       }
     }
 
@@ -3185,20 +3974,21 @@
     }
     if(action === "set-loan-monthly"){
       var loanM = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanM){ loanM.monthlyPayment = parseMoneyValue(el.value); saveState(); render(); }
+      if(loanM){ loanM.monthlyPayment = Math.abs(parseMoneyValue(el.value)); saveState(); render(); }
       return;
     }
     if(action === "set-loan-original"){
       var loanO = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanO){ loanO.originalAmount = parseMoneyValue(el.value); saveState(); updateLoanDisplay(loanO.id); }
+      if(loanO){ loanO.originalAmount = Math.abs(parseMoneyValue(el.value)); saveState(); updateLoanDisplay(loanO.id); }
       return;
     }
     if(action === "set-loan-startdate"){
       var loanT = state.loans.find(function(l){ return l.id === el.dataset.id; });
       if(loanT){
         var newStart = parseDotDateToISO(el.value);
-        loanT.startDate = newStart || "";
-        saveState(); render();
+        // 무효하면(8자리 미만 등) 저장된 시작일을 지우지 않고 화면 값을 되돌린다.
+        if(newStart){ loanT.startDate = newStart; saveState(); render(); }
+        else el.value = loanT.startDate ? fmtDateDots(loanT.startDate) : "";
       }
       return;
     }
@@ -3209,31 +3999,39 @@
     }
     if(action === "set-savings-amount"){
       var smA = getSavingsMonth(state.currentMonth);
-      smA.amount = parseMoneyValue(el.value);
+      smA.amount = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-savings-interest"){
       var smI = getSavingsMonth(state.currentMonth);
-      smI.interest = parseMoneyValue(el.value);
+      smI.interest = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-savings-event"){
       var smE = getSavingsMonth(state.currentMonth);
-      smE.eventCost = parseMoneyValue(el.value);
+      smE.eventCost = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-living-budget"){
       var lm = getLivingMonth(state.currentMonth);
-      lm.budget = parseMoneyValue(el.value);
+      lm.budget = Math.abs(parseMoneyValue(el.value));
       saveState(); updateLivingDisplay(); return;
     }
     if(action === "set-utility-field"){
       var um = getUtilityMonth(state.currentMonth);
       var ufield = el.dataset.field;
-      if(ufield === "payDate") um.payDate = parseDotDateToISO(el.value) || "";
-      else um[ufield] = Math.abs(parseMoneyValue(el.value));
+      if(ufield === "payDate"){
+        var newPayDate = parseDotDateToISO(el.value);
+        // 무효하면 저장된 납부일자를 지우지 않고 화면 값을 되돌린다.
+        // 납부일자는 손 뗄 때만 저장한다. 저장했을 때는 저장 표시도 같이 보여준다.
+        if(newPayDate){ um.payDate = newPayDate; saveState(); updateUtilityDisplay(); showUtilitySavedFlash(); }
+        else el.value = um.payDate ? fmtDateDots(um.payDate) : "";
+        return;
+      }
+      um[ufield] = Math.abs(parseMoneyValue(el.value));
       saveState();
       updateUtilityDisplay();
+      showUtilitySavedFlash();
       return;
     }
 
@@ -3278,7 +4076,7 @@
     if(action === "unlock-personal"){
       var tryPw = fd.get("unlockcode") || "";
       sha256Hex(tryPw).then(function(hash){
-        if(hash === state.personalPasswordHash){
+        if(hash === getPersonalPasswordHash()){
           personalUnlocked = true;
           uiFlags.passwordError = "";
           render();
@@ -3295,9 +4093,9 @@
       if(newPw1.length < 4){ uiFlags.passwordError = "비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
       if(newPw1 !== newPw2){ uiFlags.passwordError = "비밀번호가 서로 달라요."; renderPasswordModal(); return; }
       sha256Hex(newPw1).then(function(hash){
-        state.personalPasswordHash = hash;
+        // 비밀번호는 가계부 상태가 아니라 이 기기에만 저장한다. saveState()가 아니다.
+        setPersonalPasswordHash(hash);
         personalUnlocked = true;
-        saveState();
         uiFlags.showPasswordSetup = false;
         uiFlags.passwordError = "";
         renderPasswordModal();
@@ -3310,7 +4108,7 @@
       var chgPw1 = fd.get("newcode1") || "";
       var chgPw2 = fd.get("newcode2") || "";
       sha256Hex(curPw).then(function(curHash){
-        if(curHash !== state.personalPasswordHash){
+        if(curHash !== getPersonalPasswordHash()){
           uiFlags.passwordError = "현재 비밀번호가 올바르지 않아요.";
           renderPasswordModal();
           return;
@@ -3318,11 +4116,12 @@
         if(chgPw1.length < 4){ uiFlags.passwordError = "새 비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
         if(chgPw1 !== chgPw2){ uiFlags.passwordError = "새 비밀번호가 서로 달라요."; renderPasswordModal(); return; }
         sha256Hex(chgPw1).then(function(newHash){
-          state.personalPasswordHash = newHash;
-          saveState();
+          setPersonalPasswordHash(newHash);
           uiFlags.showPasswordSetup = false;
           uiFlags.passwordError = "";
           renderPasswordModal();
+          // 바뀐 상태가 화면에 바로 보이도록 다시 그린다(예전에는 자물쇠 표시가 그대로였다).
+          render();
         });
       });
       return;
@@ -3330,16 +4129,18 @@
     if(action === "submit-remove-password"){
       var curPw2 = fd.get("curcode") || "";
       sha256Hex(curPw2).then(function(curHash2){
-        if(curHash2 !== state.personalPasswordHash){
+        if(curHash2 !== getPersonalPasswordHash()){
           uiFlags.passwordError = "비밀번호가 올바르지 않아요.";
           renderPasswordModal();
           return;
         }
-        state.personalPasswordHash = "";
-        saveState();
+        setPersonalPasswordHash("");
         uiFlags.showPasswordSetup = false;
         uiFlags.passwordError = "";
         renderPasswordModal();
+        // 해제한 순간 자물쇠 표시가 풀린 모양으로 바뀌고, 막아두었던 내보내기·가져오기도
+        // 바로 돌아온다.
+        render();
       });
       return;
     }
@@ -3451,7 +4252,8 @@
       var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
       var lm = getLivingMonth(state.currentMonth);
-      lm.tx.push({ id: uid(), date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense" });
+      // ts는 같은 날짜 여러 건의 순서를 고정하는 기준이다. 개인 탭·저축처럼 여기도 남긴다.
+      lm.tx.push({ id: uid(), date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense", ts: Date.now() });
       saveState(); render(); return;
     }
   });
@@ -3471,8 +4273,10 @@
           importInput.value = "";
           return;
         }
-        if(!imported || typeof imported !== "object" || !Array.isArray(imported.accounts)){
-          alert("올바른 백업 파일이 아니에요.");
+        // 머니플래너 백업이 아닌 파일은 거절하고 지금 데이터를 그대로 지킨다.
+        // 예전에는 accounts가 배열인지만 봐서, 계좌 없이 생활비만 담긴 백업까지 거절했다.
+        if(!isPlainObject(imported) || !looksLikeBackup(imported)){
+          alert("머니플래너 백업 파일이 아니에요.");
           importInput.value = "";
           return;
         }
@@ -3480,19 +4284,21 @@
           importInput.value = "";
           return;
         }
-        var d = defaultState();
-        var merged = Object.assign(d, imported, {
-          accounts: imported.accounts || d.accounts,
-          logs: imported.logs || {},
-          savings: imported.savings || {},
-          savingsExpenses: imported.savingsExpenses || [],
-          living: imported.living || {},
-          loans: imported.loans || [],
-          utilities: imported.utilities || {}
-        });
-        migrateReflectedFlags(merged);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        localStorage.setItem(SYNC_UPDATED_KEY, new Date().toISOString());
+        // 파일은 읽혔으니 일부 기록이 깨져 있어도 거절하지 않는다. 다른 두 경로와 같은
+        // 정규화로 보정해서 가져오고, 몇 군데를 손봤는지 알린다.
+        var report = { fixed: 0 };
+        var merged = normalizeState(imported, report);
+        // 여기서의 쓰기는 가져오기 자체다. 저장이 막힌 상태(storageUnreadable)를 벗어나는
+        // 유일한 길이므로 saveState()를 거치지 않고 바로 쓴다.
+        if(!writeStorage(STORAGE_KEY, JSON.stringify(merged))){
+          // 실패 안내는 writeStorage가 이미 띄웠다. 지금 데이터는 건드리지 않았다.
+          importInput.value = "";
+          return;
+        }
+        writeStorage(SYNC_UPDATED_KEY, new Date().toISOString());
+        if(report.fixed > 0){
+          alert("읽을 수 없는 값이 " + report.fixed + "군데 있어서 보정해서 가져왔어요.");
+        }
         location.reload();
       };
       reader.onerror = function(){
@@ -3516,7 +4322,7 @@
           return;
         }
         var remoteUpdatedAt = new Date(res.data.updated_at).getTime();
-        var localUpdatedAtRaw = localStorage.getItem(SYNC_UPDATED_KEY);
+        var localUpdatedAtRaw = readStorage(SYNC_UPDATED_KEY);
         var localUpdatedAt = localUpdatedAtRaw ? new Date(localUpdatedAtRaw).getTime() : 0;
         if(remoteUpdatedAt > localUpdatedAt){
           lastPushedSnapshot = JSON.stringify(res.data.data);
