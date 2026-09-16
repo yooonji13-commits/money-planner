@@ -1032,7 +1032,55 @@
     normalizeMonthBuckets(s.savings, { make: defaultSavingsMonth, nums: ["amount","interest","eventCost"], strs: [], tx: true }, report);
     normalizeMonthBuckets(s.utilities, { make: defaultUtilityMonth, nums: ["community","electricity","water","heating","other"], strs: ["payDate"], tx: false }, report);
 
+    // 달 묶음 모양이 다 갖춰진 뒤에 돌려야 tx를 안전하게 훑을 수 있다.
+    migrateLegacyCarryOvers(s, report);
+
     return s;
+  }
+
+  // 예전 방식으로 이월된 기록을 지금 방식(두 줄 한 쌍)으로 맞춰준다.
+  //
+  // 예전에는 다음 달에 들어오는 줄 하나만 만들었다. 그래서 원래 달 잔액이 그대로 남아 같은
+  // 돈이 두 달에 동시에 보였고, 원래 달에는 어디로 갔는지 알려주는 줄이 없었다. 게다가 그 달은
+  // "이미 이월했어요"에 막혀 다시 이월할 수도 없어서, 손으로 고치지 않는 한 그 상태에 갇혔다.
+  //
+  // 그래서 원래 달에 같은 금액의 상쇄 줄을 넣고 두 줄을 짝으로 묶는다. 돈이 새로 생기거나
+  // 사라지지 않는다 — 이미 넘어간 금액만큼만 원래 달에서 빼는 것이고, 그게 원래 이월의 뜻이다.
+  // 다음 달 줄의 날짜는 건드리지 않는다(사용자가 알아보는 기록이다).
+  //
+  // 한 번 맞추면 두 줄 다 짝 표식을 갖게 되므로 다시 돌려도 아무 일도 하지 않는다.
+  function migrateLegacyCarryOvers(s, report){
+    var fixed = 0;
+    Object.keys(s.living).forEach(function(targetKey){
+      var targetMonth = s.living[targetKey];
+      if(!targetMonth || !Array.isArray(targetMonth.tx)) return;
+      targetMonth.tx.forEach(function(t){
+        // 짝 표식이 이미 있으면 지금 방식으로 만들어진 줄이다.
+        if(typeof t.carryPairId === "string" && t.carryPairId) return;
+        // 이월로 들어온 줄인지 본다.
+        if(typeof t.carryFrom !== "string" || !t.carryFrom) return;
+        if((t.type || "expense") !== "income") return;
+        var amount = Number(t.amount || 0);
+        if(!isFinite(amount) || amount <= 0) return;
+        // 넘어온 원래 달이 남아 있어야 상쇄 줄을 넣을 자리가 있다. 그 달이 없으면 새로 만들지
+        // 않는다 — 기준 금액 0원짜리 달에 지출만 생겨 마이너스로 보이는 게 더 이상하다.
+        var srcMonth = s.living[t.carryFrom];
+        if(!srcMonth || !Array.isArray(srcMonth.tx)) return;
+        var pairId = uid();
+        t.carryPairId = pairId;
+        srcMonth.tx.push({
+          id: uid(),
+          date: lastDayOfMonth(t.carryFrom),
+          memo: monthLabel(targetKey) + "로 이월",
+          amount: amount,
+          type: "expense",
+          carryPairId: pairId
+        });
+        fixed++;
+      });
+    });
+    // 깨진 값을 고친 것이 아니라 예전 형식을 맞춘 것이므로 보정 횟수와 따로 센다.
+    if(fixed) report.legacyCarryFixed = (report.legacyCarryFixed || 0) + fixed;
   }
 
   // 머니플래너 백업 파일인지 본다. 여섯 열쇠 중 하나라도 있으면 우리 파일로 본다(일부만 담긴
@@ -1186,8 +1234,16 @@
     }
     // 고친 상태를 바로 되써 둔다(다음에 열 때는 정규화가 끝난 데이터에서 시작한다).
     writeStorage(STORAGE_KEY, JSON.stringify(merged));
+    // 예전 방식으로 이월된 달을 맞췄으면 조용히 넘기지 않고 알린다. 목록에 없던 줄이 생기고
+    // 그 달 잔액이 달라지므로, 모르고 보면 돈이 사라진 것처럼 보인다.
+    if(loadReport.legacyCarryFixed){
+      pendingLegacyCarryNotice = loadReport.legacyCarryFixed;
+    }
     return merged;
   }
+
+  // 알림은 화면이 만들어진 뒤에 띄워야 해서 첫 그리기까지 들고 있는다.
+  var pendingLegacyCarryNotice = 0;
 
   var state = loadState();
   // 앱을 새로 열 때마다(완전히 종료 후 재실행 포함) 생활비/관리비/저축 탭이 오늘이 포함된
@@ -4340,6 +4396,10 @@
   }
 
   render();
+  if(pendingLegacyCarryNotice){
+    showNotice("예전에 이월한 " + pendingLegacyCarryNotice + "건을 맞췄어요. 넘어간 달에 '…로 이월' 줄이 생기고 그 달 잔액이 0원이 돼요.");
+    pendingLegacyCarryNotice = 0;
+  }
   initSync();
   if(onPersonalLockScreen()){
     focusPersonalLockInput();
