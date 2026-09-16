@@ -607,6 +607,14 @@
   .mp-lock-form{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:6px; }
   .mp-pw-form{ display:flex; flex-direction:column; gap:8px; }
 
+  /* 화면이 안 뜰 때 빈 화면 대신 보여주는 안내 화면. 아이폰(375px)에서도 설명과 두 버튼이
+     한눈에 들어오도록 가운데로 모아 세로로 쌓는다. */
+  .mp-error-screen{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:32px 18px; text-align:center; }
+  .mp-error-icon{ font-size:2.4rem; line-height:1; }
+  .mp-error-title{ font-size:1rem; font-weight:800; color:var(--ink); }
+  .mp-error-desc{ font-size:.86rem; color:var(--muted); line-height:1.6; word-break:keep-all; }
+  .mp-error-actions{ display:flex; flex-direction:column; gap:8px; width:100%; max-width:280px; margin-top:6px; }
+
   /* 저장 실패처럼 흐름을 멈추면 안 되는 안내. alert()과 달리 화면을 붙잡지 않는다.
      아래 탭바(.mp-tabbar)를 가리지 않도록 그 높이만큼 띄운다 — 탭바가 아래 안전영역만큼
      같이 두꺼워지므로 여기서도 같은 max() 식을 그대로 쓴다. */
@@ -1011,14 +1019,66 @@
     }
   }
 
-  // T2(안내 화면)가 붙는 자리. 여기서는 감지와 원문 보관까지만 한다.
   function isStorageUnreadable(){ return storageUnreadable; }
   function storageErrorInfo(){ return storageUnreadable ? unreadableInfo : null; }
-  // T2에서 이 함수를 안내 화면을 그리는 내용으로 채우고 true를 돌려주게 만든다. 지금은 아무것도
-  // 그리지 않고 false를 돌려주므로 평소 화면이 그대로 그려진다 — 대신 이 상태에서는
-  // saveState()가 아무것도 저장하지 않으므로 빈 가계부가 원래 내용을 덮는 일은 없다.
+
+  // ---------- 화면이 안 뜨는 상황의 안내 화면 ----------
+  // 두 경우에 이 화면이 뜬다.
+  //   1) 기기 저장분을 읽을 수 없을 때(storageUnreadable)
+  //   2) 가계부를 그리다 예상 못한 오류가 났을 때(render()의 try/catch에서 부른다)
+  // 어느 쪽이든 빈 화면을 남기지 않고, 사용자가 할 수 있는 일 두 가지만 보여준다:
+  // 원문을 파일로 내려받기(데이터를 살리는 길), 다시 불러오기.
+  //
+  // 전체 삭제·초기화 버튼은 일부러 넣지 않는다. 화면이 깨진 순간에 손이 가기 쉬운 자리에
+  // 되돌릴 수 없는 삭제 버튼을 두면, 살릴 수 있었던 기록까지 한 번에 사라진다.
+  // 또 사용자의 금액이나 내역은 한 줄도 싣지 않는다(설명과 버튼 두 개뿐이다).
+  var renderingErrorScreen = false;
+
   function renderStorageErrorScreen(){
-    return false;
+    // 안내 화면을 그리다 또 오류가 나면 render()가 이 함수를 다시 부를 수 있다. 그때 또
+    // 들어가면 끝없이 맴돈다. 그리는 동안은 빗장을 걸어 두 번째 진입을 false로 돌려보낸다.
+    if(renderingErrorScreen) return false;
+    renderingErrorScreen = true;
+    try{
+      if(!main) return false;
+      // 읽기 실패가 아니라면 그리기가 터진 경우다. 안내 문구만 그에 맞게 바꾼다.
+      var brokenByRender = !storageUnreadable;
+      var title = brokenByRender ? "화면을 여는 중 문제가 생겼어요" : "저장된 내용을 읽지 못했어요";
+      var desc = brokenByRender
+        ? "이 기기에 저장된 기록은 그대로 남아 있어요. 아래 내보내기로 파일에 담아두면 안전해요. 그다음 다시 시도를 눌러보세요."
+        : "저장된 내용이 깨져 있어서 가계부를 열지 못했어요. 원래 내용은 지우지 않고 그대로 두었고, 이 상태에서는 아무것도 저장하거나 동기화하지 않아요. 아래 내보내기로 저장된 원문을 파일에 담아두세요. 백업 파일이 있다면 위의 가져오기로 되살릴 수 있어요.";
+
+      // 뒤에 헤더와 탭바가 어중간하게 남지 않도록 같이 정리한다.
+      if(headerDate) headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
+      main.classList.remove("mp-util-tight-top");
+      // 고정내역은 탭마다 다른 목록을 state에서 꺼내 그린다. 지금은 그 그리기가 못 미더우니
+      // 버튼을 숨기고 열려 있던 패널도 닫는다.
+      var lfBtnErr = document.getElementById("mp-lf-btn");
+      if(lfBtnErr) lfBtnErr.hidden = true;
+      if(uiFlags) uiFlags.showFixedItems = false;
+      var fixedPanelErr = document.getElementById("mp-fixed-panel");
+      if(fixedPanelErr) fixedPanelErr.innerHTML = "";
+      // 탭바는 그대로 두되, 어느 탭도 켜져 있지 않아 죽어 보이지 않게 표시만 맞춰준다.
+      document.querySelectorAll(".mp-tab").forEach(function(btn){
+        btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
+      });
+
+      main.innerHTML = '<section class="mp-card mp-error-screen">' +
+        '<div class="mp-error-icon">⚠️</div>' +
+        '<div class="mp-error-title">' + esc(title) + '</div>' +
+        '<p class="mp-error-desc">' + esc(desc) + '</p>' +
+        '<div class="mp-error-actions">' +
+          '<button type="button" class="mp-btn block" data-action="export-storage-raw">내보내기</button>' +
+          '<button type="button" class="mp-btn ghost block" data-action="retry-render">다시 시도</button>' +
+        '</div>' +
+      '</section>';
+      return true;
+    }catch(e){
+      // 안내 화면조차 못 그렸다. false를 돌려주면 부른 쪽이 다른 길로 안내한다.
+      return false;
+    }finally{
+      renderingErrorScreen = false;
+    }
   }
 
   function loadState(){
@@ -2112,10 +2172,23 @@
   window.addEventListener("orientationchange", updateStickyOffset);
 
   function render(){
-    // 기기 저장분을 읽지 못했을 때는 가계부 대신 안내 화면을 그린다(T2에서 채운다).
-    // 그 화면이 아직 없으면 false를 돌려주므로 평소 화면이 그대로 그려진다 — 이 상태에서도
-    // saveState()/pushStateToCloud()가 아무것도 내보내지 않으니 덮어쓰일 위험은 없다.
+    // 기기 저장분을 읽지 못했을 때는 가계부 대신 안내 화면을 그린다.
     if(storageUnreadable && renderStorageErrorScreen()) return;
+    try{
+      drawApp();
+    }catch(err){
+      // 어느 탭의 그리기든 예상 못한 오류로 멈추면, 예전에는 빈 화면이나 반쯤 그려진 화면이
+      // 남았다. 그 자리에 안내 화면을 대신 띄운다. 원인을 찾을 수 있게 콘솔에는 남긴다.
+      if(window.console && console.error) console.error("화면 그리기 실패", err);
+      // 안내 화면을 그리다 또 터지면 renderStorageErrorScreen()이 빗장을 걸고 false를
+      // 돌려준다. 여기서 다시 부르지 않으므로 같은 자리를 맴돌지 않는다.
+      if(!renderStorageErrorScreen()){
+        showNotice("화면을 그리는 중 문제가 생겼어요. 앱을 다시 열어주세요.");
+      }
+    }
+  }
+
+  function drawApp(){
     headerDate.textContent = new Date().toLocaleDateString("ko-KR", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
     main.classList.toggle("mp-util-tight-top", state.activeTab === "utility");
     document.querySelectorAll(".mp-tab").forEach(function(btn){
@@ -2824,6 +2897,20 @@
     return html;
   }
 
+  // 내려받기는 두 자리에서 쓴다(헤더의 내보내기, 안내 화면의 내보내기). 파일 이름 규칙이
+  // 갈라지지 않도록 한 곳에 모아 둔다.
+  function downloadBackupFile(text){
+    var blob = new Blob([text], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "moneyplanner-backup-" + todayISO + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
   // ---------- events ----------
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
@@ -2957,15 +3044,43 @@
 
     if(action === "export-data"){
       var exportStr = readStorage(STORAGE_KEY) || JSON.stringify(state);
-      var blob = new Blob([exportStr], { type: "application/json" });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement("a");
-      a.href = url;
-      a.download = "moneyplanner-backup-" + todayISO + ".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      downloadBackupFile(exportStr);
+      return;
+    }
+
+    // ========================================================================
+    // 안내 화면의 내보내기 — 개인 탭 잠금 차단의 "유일한 예외"
+    //
+    // 뒤 작업에서 "개인 탭이 잠겨 있으면 내보내기를 막는다"는 규칙이 들어온다.
+    // 그 규칙을 이 경로(export-storage-raw)에는 걸지 않는다. 화면이 깨진 상황에서는
+    // 데이터를 살리는 것이 먼저이기 때문이다. 평상시 화면의 내보내기(위 export-data)에는
+    // 그 규칙을 그대로 적용한다. 예외는 여기 한 곳뿐이다.
+    //
+    // 또 하나: 이 내보내기는 화면 그리기 결과나 state에 기대지 않는다. 그리기가 실패한
+    // 상태에서도 기기에 저장된 원문(읽을 수 없을 때 따로 보관해 둔 원문이 있으면 그것)을
+    // 그대로 내려받는다.
+    // ========================================================================
+    if(action === "export-storage-raw"){
+      var info = storageErrorInfo();
+      var rawOut = null;
+      // 읽을 수 없는 원문을 다른 자리에 복사해 두었으면 그 복사본이 우선이다.
+      if(info && info.preserved && info.backupKey) rawOut = readStorage(info.backupKey);
+      // 복사가 실패했더라도(공간 부족 등) 원문은 원래 자리에 그대로 있다.
+      if(rawOut === null) rawOut = readStorage(STORAGE_KEY);
+      if(rawOut === null || rawOut === ""){
+        showNotice("이 기기에 저장된 내용이 없어요.");
+        return;
+      }
+      downloadBackupFile(rawOut);
+      return;
+    }
+
+    if(action === "retry-render"){
+      // 기기 저장분을 읽지 못한 경우에는 다시 그려봐야 그대로다(원문은 앱을 열 때 한 번만
+      // 읽는다). 그 사이 백업을 가져왔을 수도 있으니 페이지를 새로 불러온다.
+      if(storageUnreadable){ location.reload(); return; }
+      // 그리기가 잠깐 터진 경우라면 다시 그려보는 것만으로 돌아온다.
+      render();
       return;
     }
 
