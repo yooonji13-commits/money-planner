@@ -1222,6 +1222,32 @@
     return String(Math.floor(100000 + Math.random() * 900000));
   }
 
+  // 새 코드를 만들 때 겹치는 코드를 몇 번까지 다시 뽑아볼지. 필요하면 이 숫자만 바꾸면 된다.
+  var SYNC_CODE_MAX_ATTEMPTS = 10;
+
+  // 그 코드가 이미 쓰이고 있는지 확인한다. joinSyncCode()와 같은 조회 모양을 쓴다.
+  // true면 남이 쓰는 코드, false면 비어 있는 코드다. 확인 자체가 실패하면 실패로 넘긴다.
+  function isSyncCodeTaken(code){
+    return supabaseClient.from("sync_data").select("*").eq("code", code).maybeSingle()
+      .then(function(res){
+        // 조회가 오류로 돌아오면 "비어 있다"고 볼 수 없다. 확인이 안 된 코드에 덮어쓰지
+        // 않도록 여기서 실패로 넘겨서, 부르는 쪽이 아무것도 쓰지 않게 만든다.
+        if(res.error) throw new Error(res.error.message || "코드 확인 실패");
+        return !!res.data;
+      });
+  }
+
+  // 비어 있는 코드를 찾을 때까지 다시 뽑는다. 한도까지 다 겹치면 빈 문자열을 돌려주고,
+  // 확인이 실패하면(오프라인 등) 실패로 넘긴다. 자리수는 6자리를 그대로 유지한다.
+  function findFreeSyncCode(attemptsLeft){
+    var code = generateSyncCode();
+    return isSyncCodeTaken(code).then(function(taken){
+      if(!taken) return code;
+      if(attemptsLeft <= 1) return "";
+      return findFreeSyncCode(attemptsLeft - 1);
+    });
+  }
+
   function scheduleCloudPush(){
     if(storageUnreadable) return;
     if(!getSyncCode() || !supabaseClient) return;
@@ -1333,10 +1359,32 @@
       renderSyncPanel();
       return;
     }
-    var code = generateSyncCode();
     syncStatus.syncing = true;
     renderSyncPanel();
-    supabaseClient.from("sync_data").upsert({ code: code, data: state, updated_at: new Date().toISOString() })
+    // 코드를 쓰기 전에 남이 쓰고 있는지 먼저 확인한다. 확인 없이 덮어쓰면 같은 코드를
+    // 쓰던 사람의 가계부가 통째로 지워진다.
+    findFreeSyncCode(SYNC_CODE_MAX_ATTEMPTS)
+      .then(function(code){
+        if(!code){
+          // 한도까지 다 겹쳤다. 아무것도 쓰지 않고 안내만 한다.
+          syncStatus.syncing = false;
+          syncStatus.error = "코드를 만들지 못했어요. 잠시 뒤 다시 시도해주세요.";
+          renderSyncPanel();
+          return;
+        }
+        return writeNewSyncCode(code);
+      })
+      .catch(function(err){
+        // 겹침 확인이 실패했다(오프라인·요청 오류). 확인이 안 된 코드에는 절대 쓰지 않는다.
+        syncStatus.syncing = false;
+        syncStatus.error = "네트워크 연결을 확인해주세요.";
+        renderSyncPanel();
+      });
+  }
+
+  // 겹침 확인을 통과한 코드로만 행을 쓴다.
+  function writeNewSyncCode(code){
+    return supabaseClient.from("sync_data").upsert({ code: code, data: state, updated_at: new Date().toISOString() })
       .then(function(res){
         syncStatus.syncing = false;
         if(res.error){
