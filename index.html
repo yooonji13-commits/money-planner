@@ -257,6 +257,23 @@
 
   .mp-sub{ font-size:.85rem; color:var(--muted); margin-top:2px; }
 
+  /* 저장 표시: 자동으로 저장되므로, 저장 버튼 대신 "저장됨 ✓"이 잠깐 보이고 사라진다.
+     나타나고 사라질 때 아래위 줄이 밀리면 입력 중에 화면이 튀므로, 자리(height)는
+     항상 차지한 채 보이기만 켰다 끈다. 375px 폭에서도 한 줄에 들어가도록 줄바꿈을 막는다. */
+  .mp-save-flash{
+    margin-top:8px; height:1.1rem; line-height:1.1rem;
+    font-size:.74rem; font-weight:700; color:var(--positive);
+    white-space:nowrap; overflow:hidden; pointer-events:none;
+    /* 꺼져 있을 때 visibility:hidden 까지 주는 이유: opacity:0 만으로는 글자가 계속
+       화면 읽기 프로그램에 읽힌다. 사라지는 흐림 효과는 끝난 뒤에 감춘다. */
+    opacity:0; visibility:hidden;
+    transition:opacity .18s ease, visibility 0s linear .18s;
+  }
+  .mp-save-flash.is-on{
+    opacity:1; visibility:visible;
+    transition:opacity .18s ease, visibility 0s linear 0s;
+  }
+
   /* account cards */
   .mp-accounts-grid{
     display:grid; grid-template-columns:1fr 1fr; gap:14px;
@@ -1169,6 +1186,16 @@
     pushDebounceTimer = setTimeout(pushStateToCloud, 800);
   }
 
+  // 앱이 닫히거나 백그라운드로 갈 때 쓴다. 800ms 묶음을 기다리다가 앱이 멈추면 마지막
+  // 수정이 클라우드로 못 올라가므로, 기다리지 않고 바로 한 번 흘려보낸다.
+  function flushCloudPush(){
+    if(storageUnreadable) return;
+    if(!getSyncCode() || !supabaseClient) return;
+    clearTimeout(pushDebounceTimer);
+    pushDebounceTimer = null;
+    pushStateToCloud();
+  }
+
   function pushStateToCloud(){
     // 기기 저장분을 읽지 못한 상태에서는 빈 가계부를 클라우드로 올려 다른 기기 내용까지
     // 덮어버리는 일이 없도록 아예 보내지 않는다.
@@ -1808,6 +1835,19 @@
       var input = container.querySelector('[data-field="' + f + '"]');
       if(input) um[f] = Math.abs(parseMoneyValue(input.value));
     });
+  }
+  // 관리비 저장 표시를 잠깐 켠다. 치는 도중에도 불리므로 화면을 다시 그리지 않고
+  // 클래스만 토글한다(입력칸 노드를 새로 만들면 아이폰 키보드가 내려간다).
+  var utilSavedFlashTimer = null;
+  function showUtilitySavedFlash(){
+    var flashEl = document.getElementById("mp-util-saved");
+    if(!flashEl) return;
+    flashEl.classList.add("is-on");
+    clearTimeout(utilSavedFlashTimer);
+    utilSavedFlashTimer = setTimeout(function(){
+      var stillEl = document.getElementById("mp-util-saved");
+      if(stillEl) stillEl.classList.remove("is-on");
+    }, 1400);
   }
   function updateUtilityDisplay(){
     var mk = state.currentMonth;
@@ -2815,7 +2855,9 @@
         : '') +
         '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
         '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
-        '<button type="button" class="mp-btn block" id="mp-util-save-btn" data-action="save-utility" style="margin-top:12px;">저장</button>' +
+        // 저장 버튼은 없앴다. 금액 다섯 칸은 치는 도중에도 저장되고 납부일자는 손 뗄 때
+        // 저장되므로, 누를 일이 없는 버튼이 됐다. 대신 여기에 저장 표시만 남긴다.
+        '<div class="mp-save-flash" id="mp-util-saved" aria-live="polite">저장됨 ✓</div>' +
       '</section>' +
     '</div>' +
       (hasAnyUtilityData() ? utilityChartSectionHTML(mk, chartField) : "");
@@ -2959,6 +3001,33 @@
   }
 
   // ---------- events ----------
+
+  // 입력칸에 값이 남아 있는 채로 앱이 백그라운드로 가거나 닫히면, 마지막 값을 마무리
+  // 저장한다. 저장 범위는 탭을 옮길 때 저장하는 것과 똑같다(관리비·생활비 기준 금액·
+  // 저축 3칸·개인 탭 기준 잔액·대출 금액/회차).
+  // 아이폰 사파리는 홈 화면으로 나갈 때 beforeunload를 부르지 않는 경우가 많아,
+  // 실제로 불리는 visibilitychange(hidden)와 pagehide를 쓴다.
+  var leaveFlushed = false;
+  function flushPendingBeforeLeave(){
+    // 두 이벤트가 연달아 오면 같은 저장을 두 번 하게 되므로 한 번만 하도록 잠근다.
+    if(leaveFlushed) return;
+    leaveFlushed = true;
+    commitPendingUtilityFields();
+    commitPendingSavingsFields();
+    commitPendingLivingFields();
+    commitPendingLoanFields();
+    commitPendingPersonalFields();
+    // 저장이 막힌 상태(기기 저장분을 읽지 못한 경우)는 saveState()가 알아서 걸러낸다.
+    saveState();
+    flushCloudPush();
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) flushPendingBeforeLeave();
+    // 다시 돌아왔으면 잠금을 풀어, 또 나갈 때 한 번 더 마무리 저장할 수 있게 한다.
+    else leaveFlushed = false;
+  });
+  window.addEventListener("pagehide", function(){ flushPendingBeforeLeave(); });
+
   document.querySelectorAll(".mp-tab").forEach(function(btn){
     btn.addEventListener("click", function(){
       if(btn.dataset.tab === state.activeTab) return;
@@ -3322,16 +3391,6 @@
     if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
     if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
-    if(action === "save-utility"){
-      commitPendingUtilityFields();
-      saveState();
-      updateUtilityDisplay();
-      var savedLabel = el.textContent;
-      el.textContent = "저장됨 ✓";
-      el.disabled = true;
-      setTimeout(function(){ el.textContent = savedLabel; el.disabled = false; }, 1200);
-      return;
-    }
     if(action === "set-utility-chart-field"){
       uiFlags.utilityChartField = el.dataset.field;
       render();
@@ -3467,6 +3526,11 @@
       var totalElLive = document.querySelector("#mp-main .mp-hero .mp-total");
       if(totalElLive) totalElLive.textContent = won(utilityTotal(umLive));
       liveUtilityChartPatch();
+      // 치는 도중에도 기기에 저장한다. 예전에는 화면 합계만 바뀌고 저장은 안 돼서,
+      // 저장된 것처럼 보이는 채로 앱을 닫으면 방금 친 금액이 사라졌다.
+      // saveState()는 화면을 다시 그리지 않으므로 이 입력칸 노드와 커서는 그대로 남는다.
+      saveState();
+      showUtilitySavedFlash();
     }
 
     if(el.dataset.action === "edit-lf-amount"){
@@ -3474,6 +3538,8 @@
       if(lfItemLive){
         lfItemLive.amount = Math.abs(parseMoneyValue(el.value));
         updateFixedItemsTotal();
+        // 고정내역 금액도 관리비와 같은 경로였다(화면 합계만 갱신). 같이 저장한다.
+        saveState();
       }
     }
 
@@ -3717,13 +3783,15 @@
       if(ufield === "payDate"){
         var newPayDate = parseDotDateToISO(el.value);
         // 무효하면 저장된 납부일자를 지우지 않고 화면 값을 되돌린다.
-        if(newPayDate){ um.payDate = newPayDate; saveState(); updateUtilityDisplay(); }
+        // 납부일자는 손 뗄 때만 저장한다. 저장했을 때는 저장 표시도 같이 보여준다.
+        if(newPayDate){ um.payDate = newPayDate; saveState(); updateUtilityDisplay(); showUtilitySavedFlash(); }
         else el.value = um.payDate ? fmtDateDots(um.payDate) : "";
         return;
       }
       um[ufield] = Math.abs(parseMoneyValue(el.value));
       saveState();
       updateUtilityDisplay();
+      showUtilitySavedFlash();
       return;
     }
 
