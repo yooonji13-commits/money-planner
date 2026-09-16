@@ -1872,12 +1872,16 @@
     var container = document.querySelector("#mp-main .mp-account.is-expanded");
     if(!container) return;
     var sm = getSavingsMonth(state.currentMonth);
+    // 마이너스를 넣을 수 있는 금액칸은 개인 탭 '기준 잔액' 하나뿐이다(± 버튼으로 뒤집는다).
+    // 저축 세 칸·생활비 기준 금액·대출 금액/월 상환액은 모두 양수만이다. 입력 중 화면은
+    // 이미 Math.abs로 보여주고 있었는데 저장 쪽에만 부호가 남아, 손을 떼는 순간 값이
+    // 마이너스로 튀었다. 그래서 저장하는 자리도 전부 양수로 맞춘다.
     var amountInput = container.querySelector('[data-action="set-savings-amount"]');
-    if(amountInput) sm.amount = parseMoneyValue(amountInput.value);
+    if(amountInput) sm.amount = Math.abs(parseMoneyValue(amountInput.value));
     var interestInput = container.querySelector('[data-action="set-savings-interest"]');
-    if(interestInput) sm.interest = parseMoneyValue(interestInput.value);
+    if(interestInput) sm.interest = Math.abs(parseMoneyValue(interestInput.value));
     var eventInput = container.querySelector('[data-action="set-savings-event"]');
-    if(eventInput) sm.eventCost = parseMoneyValue(eventInput.value);
+    if(eventInput) sm.eventCost = Math.abs(parseMoneyValue(eventInput.value));
   }
   function updateSavingsDisplay(){
     var mk = state.currentMonth;
@@ -1941,7 +1945,7 @@
     if(!loLive) return;
     var origInput = loanCard.querySelector('[data-action="set-loan-original"]');
     var instInput = loanCard.querySelector('[data-action="set-loan-installment"]');
-    var liveOriginal = origInput ? parseMoneyValue(origInput.value) : loLive.originalAmount;
+    var liveOriginal = origInput ? Math.abs(parseMoneyValue(origInput.value)) : loLive.originalAmount;
     var liveInstallment = instInput ? Math.max(0, parseInt(instInput.value, 10) || 0) : loLive.currentInstallment;
     var liveRepaid = liveInstallment * Number(loLive.monthlyPayment||0);
     var liveRemaining = liveOriginal - liveRepaid;
@@ -1980,7 +1984,7 @@
     var loan = state.loans.find(function(l){ return l.id === expandedLoanId; });
     if(!loan) return;
     var originalInput = document.querySelector('[data-action="set-loan-original"][data-id="' + expandedLoanId + '"]');
-    if(originalInput) loan.originalAmount = parseMoneyValue(originalInput.value);
+    if(originalInput) loan.originalAmount = Math.abs(parseMoneyValue(originalInput.value));
     var installmentInput = document.querySelector('[data-action="set-loan-installment"][data-id="' + expandedLoanId + '"]');
     if(installmentInput) loan.currentInstallment = Math.max(0, parseInt(installmentInput.value, 10) || 0);
   }
@@ -2025,7 +2029,7 @@
     if(!container) return;
     var lm = getLivingMonth(state.currentMonth);
     var budgetInput = container.querySelector('[data-action="set-living-budget"]');
-    if(budgetInput) lm.budget = parseMoneyValue(budgetInput.value);
+    if(budgetInput) lm.budget = Math.abs(parseMoneyValue(budgetInput.value));
   }
   function updateLivingDisplay(){
     var mk = state.currentMonth;
@@ -2238,6 +2242,11 @@
     if(padded) width += 3;
     return Math.max(4, width) + "ch";
   }
+
+  // 마이너스를 그대로 두는 금액칸. 지금은 개인 탭 '기준 잔액'뿐이고, 여기에만 ± 버튼이 있다.
+  // (아이폰 숫자 키패드에 - 키가 없어서 버튼으로 뒤집는다.) 이 목록에 없는 금액칸은
+  // 화면·저장·다시 읽기 세 곳에서 모두 양수다.
+  var POSITIVE_ONLY_MONEY_EXEMPT = { "set-balance": true };
 
   function parseMoneyValue(raw){
     raw = String(raw == null ? "" : raw);
@@ -3344,7 +3353,7 @@
       var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
       if(pendingLoan){
         var pendingOriginalInput = main.querySelector('[data-action="set-loan-original"][data-id="' + toggleLoanId + '"]');
-        if(pendingOriginalInput) pendingLoan.originalAmount = parseMoneyValue(pendingOriginalInput.value);
+        if(pendingOriginalInput) pendingLoan.originalAmount = Math.abs(parseMoneyValue(pendingOriginalInput.value));
         var pendingInstallmentInput = main.querySelector('[data-action="set-loan-installment"][data-id="' + toggleLoanId + '"]');
         if(pendingInstallmentInput) pendingLoan.currentInstallment = Math.max(0, parseInt(pendingInstallmentInput.value, 10) || 0);
       }
@@ -3502,6 +3511,11 @@
     if(!el.classList || !el.classList.contains("mp-money")) return;
     var caret = el.selectionStart;
     var oldVal = el.value;
+    // 마이너스를 받는 금액칸은 개인 탭 '기준 잔액' 하나뿐이다. 나머지 칸은 저장할 때
+    // 양수로 바꾸는데, 입력칸 글자에 마이너스가 남아 있으면 화면과 저장값이 달라 보인다
+    // (아이폰 키패드에 - 키가 없어 붙여넣기로만 들어오지만, 들어오면 그대로 보였다).
+    // 그래서 부호를 받지 않는 칸은 치는 즉시 마이너스를 떼어낸다.
+    if(!POSITIVE_ONLY_MONEY_EXEMPT[el.dataset.action]) oldVal = oldVal.replace(/-/g, "");
     var digitsBefore = (oldVal.slice(0, caret).match(/[0-9]/g) || []).length;
     var negative = /^\s*-/.test(oldVal);
     var formatted = formatNumberString(oldVal);
@@ -3734,12 +3748,12 @@
     }
     if(action === "set-loan-monthly"){
       var loanM = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanM){ loanM.monthlyPayment = parseMoneyValue(el.value); saveState(); render(); }
+      if(loanM){ loanM.monthlyPayment = Math.abs(parseMoneyValue(el.value)); saveState(); render(); }
       return;
     }
     if(action === "set-loan-original"){
       var loanO = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanO){ loanO.originalAmount = parseMoneyValue(el.value); saveState(); updateLoanDisplay(loanO.id); }
+      if(loanO){ loanO.originalAmount = Math.abs(parseMoneyValue(el.value)); saveState(); updateLoanDisplay(loanO.id); }
       return;
     }
     if(action === "set-loan-startdate"){
@@ -3759,22 +3773,22 @@
     }
     if(action === "set-savings-amount"){
       var smA = getSavingsMonth(state.currentMonth);
-      smA.amount = parseMoneyValue(el.value);
+      smA.amount = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-savings-interest"){
       var smI = getSavingsMonth(state.currentMonth);
-      smI.interest = parseMoneyValue(el.value);
+      smI.interest = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-savings-event"){
       var smE = getSavingsMonth(state.currentMonth);
-      smE.eventCost = parseMoneyValue(el.value);
+      smE.eventCost = Math.abs(parseMoneyValue(el.value));
       saveState(); updateSavingsDisplay(); return;
     }
     if(action === "set-living-budget"){
       var lm = getLivingMonth(state.currentMonth);
-      lm.budget = parseMoneyValue(el.value);
+      lm.budget = Math.abs(parseMoneyValue(el.value));
       saveState(); updateLivingDisplay(); return;
     }
     if(action === "set-utility-field"){
