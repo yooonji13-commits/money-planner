@@ -2062,6 +2062,14 @@
       if(fillEl) fillEl.style.width = pct + "%";
     }
   }
+  // 지금 보고 있는 달의 생활비 내역 중 이 줄이 이월로 만들어진 것이면 짝 표식을 돌려준다.
+  // 삭제 확인 문구와 실제 삭제가 같은 판단을 쓰도록 한 군데로 모아둔다.
+  function livingTxCarryPairId(txId){
+    var lm = getLivingMonth(state.currentMonth);
+    var t = (lm.tx || []).find(function(x){ return x.id === txId; });
+    return (t && typeof t.carryPairId === "string" && t.carryPairId) ? t.carryPairId : "";
+  }
+
   function getLog(accountId){
     if(!state.logs[accountId]) state.logs[accountId] = [];
     return state.logs[accountId];
@@ -3075,7 +3083,13 @@
     var action = el.dataset.action;
 
     if(action.indexOf("delete-") === 0){
-      if(!confirm(DELETE_CONFIRM_TEXT[action] || "정말 삭제할까요?")) return;
+      // 이월로 만들어진 줄은 짝과 함께 사라진다. 다른 달에 있는 줄까지 없어지는데
+      // "이 내역을 삭제할까요?"만 뜨면 모르고 지우게 되므로, 그때는 따로 알려준다.
+      var confirmText = DELETE_CONFIRM_TEXT[action] || "정말 삭제할까요?";
+      if(action === "delete-living-tx" && livingTxCarryPairId(el.dataset.id)){
+        confirmText = "이 내역은 이월로 만들어진 줄이에요. 지우면 짝이 되는 다른 달의 줄도 함께 사라지고, 두 달의 잔액이 이월 전으로 돌아가요. 삭제할까요?";
+      }
+      if(!confirm(confirmText)) return;
     }
 
     if(action === "toggle-sync-panel"){
@@ -3422,12 +3436,11 @@
 
     if(action === "delete-living-tx"){
       var lm = getLivingMonth(state.currentMonth);
-      var delTx = lm.tx.find(function(t){ return t.id === el.dataset.id; });
       // 이월 짝 표식이 있는 줄은 짝도 같이 지운다. 한쪽만 남으면 다음 달에는 돈이 들어온
       // 채로, 원래 달은 빠져나간 채로 남아 장부가 어긋난다. 짝은 다른 달에 있으니 달 묶음을
       // 전부 훑는다. 표식이 없는 예전 이월 줄은 짝이 없으므로 그 줄만 지운다 — 예전 기록을
       // 건드리지 않는다는 규칙이 먼저다.
-      var delPairId = (delTx && typeof delTx.carryPairId === "string" && delTx.carryPairId) ? delTx.carryPairId : "";
+      var delPairId = livingTxCarryPairId(el.dataset.id);
       if(delPairId){
         Object.keys(state.living).forEach(function(pk){
           var pb = state.living[pk];
