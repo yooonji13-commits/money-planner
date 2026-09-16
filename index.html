@@ -1798,7 +1798,12 @@
     if(!container) return;
     var um = getUtilityMonth(state.currentMonth);
     var dateInput = container.querySelector('[data-field="payDate"]');
-    if(dateInput) um.payDate = parseDotDateToISO(dateInput.value) || "";
+    // 날짜 칸은 8자리가 다 채워져 유효할 때만 저장한다. 중간 상태를 저장하면 이미 적어둔
+    // 납부일자가 지워진다. 무효하면 저장된 값을 그대로 둔다.
+    if(dateInput){
+      var pendingPayDate = parseDotDateToISO(dateInput.value);
+      if(pendingPayDate) um.payDate = pendingPayDate;
+    }
     ["community","electricity","water","heating","other"].forEach(function(f){
       var input = container.querySelector('[data-field="' + f + '"]');
       if(input) um[f] = Math.abs(parseMoneyValue(input.value));
@@ -2086,14 +2091,59 @@
     if(p.length !== 3) return iso;
     return p[0] + "." + p[1] + "." + p[2];
   }
+  // 날짜 칸의 "2026.02.31" 같은 값을 ISO 날짜로 바꾼다.
+  // - 8자리(YYYYMMDD)가 다 채워지지 않으면 null을 돌려준다. "치는 도중"(2026, 2026.1 …)은
+  //   전부 여기에 걸리므로, 부르는 쪽은 null이면 저장하지 말고 이전 값을 되돌려야 한다.
+  //   이미 적어둔 날짜가 중간 상태 때문에 지워지면 안 되기 때문이다.
+  // - 월은 1~12, 일은 그 달의 마지막 날을 넘지 않게 맞춘다(2월 31일 → 2월 28/29일).
   function parseDotDateToISO(str){
     var digits = String(str||"").replace(/[^0-9]/g, "").slice(0,8);
     if(digits.length < 8) return null;
     var y = digits.slice(0,4);
     var mo = Math.min(12, Math.max(1, parseInt(digits.slice(4,6),10) || 1));
-    var da = Math.min(31, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
+    var mk = y + "-" + String(mo).padStart(2,"0");
+    // 그 달의 마지막 날은 이미 있는 lastDayOfMonth()로 구한다(윤년 계산을 두 번 적지 않는다).
+    var maxDay = parseInt(String(lastDayOfMonth(mk)).split("-")[2], 10) || 31;
+    var da = Math.min(maxDay, Math.max(1, parseInt(digits.slice(6,8),10) || 1));
     return y + "-" + String(mo).padStart(2,"0") + "-" + String(da).padStart(2,"0");
   }
+  // 내역 목록 정렬 비교기. 같은 데이터로 두 번 그리면 순서가 완전히 같아야 한다.
+  // desc=true면 최신순(날짜 내림차순), false면 과거순.
+  // 규칙
+  //  1) 날짜가 빈 기록은 방향과 상관없이 목록 맨 끝에 둔다.
+  //  2) 날짜는 ISO 문자열이라 사전순 비교가 곧 날짜 비교다.
+  //  3) 같은 날짜면 ts(적은 순서)로 가른다. ts가 없는 예전 기록은 "먼저 적은 것"으로 본다 —
+  //     최신순에선 ts 있는 쪽이 위, 과거순에선 ts 없는 쪽이 위다.
+  //  4) 더 가를 것이 없으면 0을 돌려준다. Array.prototype.sort는 안정 정렬이라
+  //     0이면 배열에 담긴(= 저장된) 순서가 그대로 유지된다.
+  // ts를 뺄셈(b.ts - a.ts)으로 비교하면 ts가 없는 기록에서 NaN이 나와 비교 자체가 망가진다.
+  // 그래서 아래처럼 뺄셈 없이 크고 작음만 따진다.
+  function compareTxForList(a, b, desc){
+    var da = (a && typeof a.date === "string") ? a.date : "";
+    var db = (b && typeof b.date === "string") ? b.date : "";
+    if(!da || !db){
+      if(!da && !db) return 0;
+      return da ? -1 : 1;
+    }
+    if(da !== db){
+      if(desc) return da < db ? 1 : -1;
+      return da < db ? -1 : 1;
+    }
+    var hasA = a && typeof a.ts === "number" && isFinite(a.ts);
+    var hasB = b && typeof b.ts === "number" && isFinite(b.ts);
+    if(!hasA && !hasB) return 0;
+    if(hasA !== hasB){
+      if(desc) return hasA ? -1 : 1;
+      return hasA ? 1 : -1;
+    }
+    if(a.ts === b.ts) return 0;
+    if(desc) return a.ts < b.ts ? 1 : -1;
+    return a.ts < b.ts ? -1 : 1;
+  }
+  function txListComparator(desc){
+    return function(a, b){ return compareTxForList(a, b, desc); };
+  }
+
   function formatDateDotsRaw(raw){
     var digits = String(raw||"").replace(/[^0-9]/g, "").slice(0,8);
     var parts = [];
@@ -2378,10 +2428,7 @@
     if(expandedAcc){
       var log = getLog(expandedAcc.id);
       var sortDesc = uiFlags.logSortOrder !== "asc";
-      var sorted = log.slice().sort(function(a,b){
-        var d = sortDesc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
-        return d !== 0 ? d : (sortDesc ? b.ts - a.ts : a.ts - b.ts);
-      });
+      var sorted = log.slice().sort(txListComparator(sortDesc));
 
       html += '<div class="mp-card mp-log-card">' +
         (log.length ?
@@ -2458,7 +2505,7 @@
   }
   // 사용 내역을 분류별로 묶고, 묶음마다 소계를 보여준다.
   function savingsUsedDetailHTML(sm){
-    var list = (sm.tx || []).slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var list = (sm.tx || []).slice().sort(txListComparator(true));
     if(!list.length) return '<div class="mp-sv-used-detail"><div class="mp-empty">이번 달 사용 내역이 없어요</div></div>';
     var order = [];
     var buckets = {};
@@ -2574,7 +2621,7 @@
     var remain = Number(m.budget||0) - spent + received;
     var bar = livingBarState(m.budget, spent, received);
     var pct = bar.pct, barClass = bar.cls;
-    var txSorted = m.tx.slice().sort(function(a,b){ return b.date.localeCompare(a.date); });
+    var txSorted = m.tx.slice().sort(txListComparator(true));
 
     return '<div class="mp-tab-sticky">' +
       '<div class="mp-month-switch">' +
@@ -3369,6 +3416,11 @@
       }
       return;
     }
+    // 날짜 칸(.mp-date-input)은 "치는 도중 저장"(input에서 바로 saveState) 대상이 아니다.
+    // 여기서는 점만 끼워 넣어 보이게 다듬고, 저장은 change/focusout에서 8자리가 다 채워져
+    // parseDotDateToISO()가 유효한 값을 줄 때만 한다. 중간 상태(2026, 2026.1 …)를 저장하면
+    // 이미 적어둔 날짜가 지워지기 때문이다. 금액 칸에 치는 도중 저장을 넣더라도
+    // 이 분기에는 saveState()를 붙이지 말 것.
     if(el.classList && el.classList.contains("mp-date-input")){
       var dCaret = el.selectionStart;
       var dOldVal = el.value;
@@ -3628,8 +3680,9 @@
       var loanT = state.loans.find(function(l){ return l.id === el.dataset.id; });
       if(loanT){
         var newStart = parseDotDateToISO(el.value);
-        loanT.startDate = newStart || "";
-        saveState(); render();
+        // 무효하면(8자리 미만 등) 저장된 시작일을 지우지 않고 화면 값을 되돌린다.
+        if(newStart){ loanT.startDate = newStart; saveState(); render(); }
+        else el.value = loanT.startDate ? fmtDateDots(loanT.startDate) : "";
       }
       return;
     }
@@ -3661,8 +3714,14 @@
     if(action === "set-utility-field"){
       var um = getUtilityMonth(state.currentMonth);
       var ufield = el.dataset.field;
-      if(ufield === "payDate") um.payDate = parseDotDateToISO(el.value) || "";
-      else um[ufield] = Math.abs(parseMoneyValue(el.value));
+      if(ufield === "payDate"){
+        var newPayDate = parseDotDateToISO(el.value);
+        // 무효하면 저장된 납부일자를 지우지 않고 화면 값을 되돌린다.
+        if(newPayDate){ um.payDate = newPayDate; saveState(); updateUtilityDisplay(); }
+        else el.value = um.payDate ? fmtDateDots(um.payDate) : "";
+        return;
+      }
+      um[ufield] = Math.abs(parseMoneyValue(el.value));
       saveState();
       updateUtilityDisplay();
       return;
@@ -3882,7 +3941,8 @@
       var amt2 = Math.abs(parseMoneyValue(fd.get("amount")));
       if(amt2 <= 0) return;
       var lm = getLivingMonth(state.currentMonth);
-      lm.tx.push({ id: uid(), date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense" });
+      // ts는 같은 날짜 여러 건의 순서를 고정하는 기준이다. 개인 탭·저축처럼 여기도 남긴다.
+      lm.tx.push({ id: uid(), date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: amt2, type: fd.get("type") || "expense", ts: Date.now() });
       saveState(); render(); return;
     }
   });
