@@ -652,8 +652,8 @@
     <div class="mp-date" id="mp-headerdate"></div>
     <div class="mp-header-actions">
       <button class="mp-reset-btn" id="mp-sync-btn" data-action="toggle-sync-panel" type="button">동기화</button>
-      <button class="mp-reset-btn" data-action="export-data" type="button">내보내기</button>
-      <button class="mp-reset-btn" data-action="trigger-import" type="button">가져오기</button>
+      <button class="mp-reset-btn" id="mp-export-btn" data-action="export-data" type="button">내보내기</button>
+      <button class="mp-reset-btn" id="mp-import-btn" data-action="trigger-import" type="button">가져오기</button>
       <button class="mp-reset-btn" id="mp-calc-btn" data-action="toggle-calculator" type="button">계산기</button>
       <button class="mp-reset-btn" id="mp-lf-btn" data-action="toggle-fixed-items" type="button">고정내역</button>
     </div>
@@ -737,8 +737,7 @@
       living: {},
       loans: [],
       utilities: {},
-      fixedItemsByTab: { personal: [], living: [], family: [] },
-      personalPasswordHash: ""
+      fixedItemsByTab: { personal: [], living: [], family: [] }
     };
   }
 
@@ -829,6 +828,22 @@
     }catch(e){
       return null;
     }
+  }
+
+  // ---------- 개인 탭 비밀번호는 기기에만 둔다 ----------
+  // 예전에는 비밀번호 해시가 가계부 상태(state) 안에 있어서 동기화 데이터에 그대로 실려 다녔다.
+  // 그래서 한 기기에서 걸면 연결된 다른 기기까지 같이 잠기고, 한쪽에서 풀면 양쪽이 풀렸다.
+  // 이제는 가계부 상태 밖의 이 자리에만 저장한다 — 클라우드로 보내지 않고, 클라우드에서 받아도
+  // 반영하지 않으며, 내보내기 파일에도 담기지 않는다.
+  var PASSWORD_KEY = "mp_personal_pw_v1";
+  var devicePasswordHash = readStorage(PASSWORD_KEY) || "";
+
+  function getPersonalPasswordHash(){ return devicePasswordHash; }
+
+  function setPersonalPasswordHash(hash){
+    devicePasswordHash = hash || "";
+    if(devicePasswordHash) writeStorage(PASSWORD_KEY, devicePasswordHash);
+    else { try{ localStorage.removeItem(PASSWORD_KEY); }catch(e){} }
   }
 
   // ---------- 데이터 정규화 ----------
@@ -956,6 +971,14 @@
     // 모르는 칸(지금은 아무도 읽지 않는 savingsExpenses 포함)도 손대지 않고 그대로 넘긴다.
     if(isPlainObject(raw)) Object.assign(s, raw);
 
+    // 개인 탭 비밀번호는 기기에만 두는 값이라 가계부 상태에서 떼어낸다. 세 경로가 모두 여기를
+    // 지나므로, 클라우드에서 받은 데이터에 들어 있어도·예전 형식 백업 파일에 들어 있어도
+    // 이 기기의 비밀번호는 그대로다(가져오기로 남의 비밀번호가 걸리지 않는다).
+    // 기기 저장분에 남아 있던 예전 값만 loadState()가 report에서 꺼내 기기 자리로 옮긴다.
+    // 보정 횟수(report.fixed)에는 세지 않는다 — 깨진 값을 고친 게 아니라 자리를 옮긴 것이다.
+    report.legacyPasswordHash = (typeof s.personalPasswordHash === "string") ? s.personalPasswordHash : "";
+    delete s.personalPasswordHash;
+
     // 컨테이너 모양을 먼저 맞춘다. migrateReflectedFlags()가 accounts/loans를 훑기 때문에
     // 그보다 앞서 배열·객체임을 보장해야 한다(숫자에 .forEach를 부르면 그대로 터진다).
     if(!Array.isArray(s.accounts)) s.accounts = [];
@@ -1080,6 +1103,9 @@
       // 버튼을 숨기고 열려 있던 패널도 닫는다.
       var lfBtnErr = document.getElementById("mp-lf-btn");
       if(lfBtnErr) lfBtnErr.hidden = true;
+      // 잠긴 동안이면 이 화면에서도 헤더의 내보내기·가져오기는 숨긴다. 아래 안내 화면 안의
+      // 내보내기(export-storage-raw)는 잠겨 있어도 그대로 눌러 원문을 살릴 수 있다.
+      syncBackupButtonsHidden();
       if(uiFlags) uiFlags.showFixedItems = false;
       var fixedPanelErr = document.getElementById("mp-fixed-panel");
       if(fixedPanelErr) fixedPanelErr.innerHTML = "";
@@ -1131,12 +1157,21 @@
     }
 
     var merged;
+    var loadReport = { fixed: 0 };
     try{
-      merged = normalizeState(parsed);
+      merged = normalizeState(parsed, loadReport);
     }catch(e){
       // 여기까지 올 일은 없어야 하지만, 혹시라도 정규화가 터지면 원문을 잃지 않는 쪽을 택한다.
       preserveUnreadableRaw(raw);
       return normalizeState(defaultState());
+    }
+    // 이관: 예전에는 비밀번호가 가계부 상태 안에 있었다. 그 값을 기기 자리로 옮긴다.
+    // 기기 자리에 이미 값이 있으면 건드리지 않는다. 옮기는 것뿐이라 잠금 상태는 그대로다 —
+    // 이관 전에 잠겨 있던 기기(저장분에 해시가 있던 기기)는 계속 잠기고, 안 잠겨 있던 기기는
+    // 옮길 값이 없으니 계속 안 잠긴다. 이관 때문에 잠기거나 풀리는 일은 없다.
+    // 바로 아래 되쓰기로 저장분에서는 해시가 사라진다(동기화 데이터에서 지운다).
+    if(!devicePasswordHash && loadReport.legacyPasswordHash){
+      setPersonalPasswordHash(loadReport.legacyPasswordHash);
     }
     // 고친 상태를 바로 되써 둔다(다음에 열 때는 정규화가 끝난 데이터에서 시작한다).
     writeStorage(STORAGE_KEY, JSON.stringify(merged));
@@ -1710,7 +1745,7 @@
     var panel = document.getElementById("mp-password-panel");
     if(!panel) return;
     if(!uiFlags.showPasswordSetup){ panel.innerHTML = ""; return; }
-    var hasPw = !!state.personalPasswordHash;
+    var hasPw = !!getPersonalPasswordHash();
     var mode = uiFlags.passwordModalMode || (hasPw ? "menu" : "set");
     var body = "";
     if(mode === "menu"){
@@ -2083,8 +2118,27 @@
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
+  // "잠긴 동안" — 이 기기에 비밀번호가 걸려 있고 아직 풀지 않은 동안. 어느 탭에 있든 참이다.
+  // 개인 탭을 벗어나면 personalUnlocked가 다시 false가 되므로, 다른 탭에서도 계속 잠긴 상태다.
+  // 아래 onPersonalLockScreen()은 "지금 잠금 화면이 떠 있는가"라는 더 좁은 물음이다. 내보내기·
+  // 가져오기 차단에 좁은 쪽을 쓰면 탭 하나만 눌러 나간 뒤 그대로 내보낼 수 있어 막는 뜻이 없다.
+  function personalLocked(){
+    return !!getPersonalPasswordHash() && !personalUnlocked;
+  }
+
   function onPersonalLockScreen(){
-    return state.activeTab === "personal" && !!state.personalPasswordHash && !personalUnlocked;
+    return state.activeTab === "personal" && personalLocked();
+  }
+
+  // 잠긴 동안에는 내보내기·가져오기 버튼을 숨긴다. 잠금 화면에서 내보내기를 누르면 개인 탭
+  // 내용까지 파일로 다 나가기 때문이다. 동기화와 계산기는 막지 않는다 — 새 기기에서는 연결부터
+  // 해야 하는 경우가 있어서다. 안내 화면의 내보내기(export-storage-raw)도 예외로 남는다.
+  function syncBackupButtonsHidden(){
+    var lockedNow = personalLocked();
+    var expBtn = document.getElementById("mp-export-btn");
+    if(expBtn) expBtn.hidden = lockedNow;
+    var impBtn = document.getElementById("mp-import-btn");
+    if(impBtn) impBtn.hidden = lockedNow;
   }
 
   function sha256Hex(text){
@@ -2317,6 +2371,7 @@
       lfBtn.hidden = hideLfBtn;
       if(hideLfBtn && uiFlags.showFixedItems) uiFlags.showFixedItems = false;
     }
+    syncBackupButtonsHidden();
     // 고정내역은 탭마다 목록이 다르므로, 열려있는 동안 탭/데이터가 바뀌면 다시 그린다.
     // 단, 그 안의 입력칸을 쓰고 있는 중이면 건드리지 않는다(포커스가 빠지기 때문).
     var fixedPanelEl = document.getElementById("mp-fixed-panel");
@@ -2389,7 +2444,7 @@
   }
 
   function renderPersonal(){
-    if(state.personalPasswordHash && !personalUnlocked){
+    if(personalLocked()){
       return renderPersonalLockScreen();
     }
     var html = "";
@@ -2409,7 +2464,7 @@
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
           '</form>' :
           '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>')) +
-      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (state.personalPasswordHash ? '🔒' : '🔓') + '</button>' +
+      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (getPersonalPasswordHash() ? '🔒' : '🔓') + '</button>' +
       '</div>';
 
     if(expandedAcc){
@@ -3190,6 +3245,8 @@
     }
 
     if(action === "export-data"){
+      // 버튼은 이미 숨겨두지만, 잠긴 동안에는 눌려도 나가지 않게 여기서도 한 번 더 막는다.
+      if(personalLocked()){ showNotice("개인 탭 비밀번호를 푼 뒤에 내보낼 수 있어요."); return; }
       var exportStr = readStorage(STORAGE_KEY) || JSON.stringify(state);
       downloadBackupFile(exportStr);
       return;
@@ -3232,6 +3289,7 @@
     }
 
     if(action === "trigger-import"){
+      if(personalLocked()){ showNotice("개인 탭 비밀번호를 푼 뒤에 가져올 수 있어요."); return; }
       var fileInput = document.getElementById("mp-import-input");
       if(fileInput) fileInput.click();
       return;
@@ -3528,10 +3586,18 @@
   root.addEventListener("input", function(e){
     var el = e.target;
     if(el.classList && el.classList.contains("mp-unlock-input")){
+      // 다시 입력하기 시작하면 틀렸다는 안내를 지운다. 이때 화면을 통째로 다시 그리면 입력칸
+      // DOM이 새로 만들어져 치던 비밀번호가 지워지고 키패드가 내려간다(실시간 동기화 갱신이
+      // 잠금 화면에서 다시 그리기를 피하는 것과 같은 이유다). 그래서 안내 문구만 걷어낸다.
+      if(uiFlags.passwordError){
+        uiFlags.passwordError = "";
+        var lockErrEl = document.querySelector(".mp-lock-screen .mp-sync-status.err");
+        if(lockErrEl && lockErrEl.parentNode) lockErrEl.parentNode.removeChild(lockErrEl);
+      }
       var tryVal = el.value;
       if(tryVal.length >= 4){
         sha256Hex(tryVal).then(function(hash){
-          if(hash === state.personalPasswordHash){
+          if(hash === getPersonalPasswordHash()){
             personalUnlocked = true;
             uiFlags.passwordError = "";
             render();
@@ -3906,7 +3972,7 @@
     if(action === "unlock-personal"){
       var tryPw = fd.get("unlockcode") || "";
       sha256Hex(tryPw).then(function(hash){
-        if(hash === state.personalPasswordHash){
+        if(hash === getPersonalPasswordHash()){
           personalUnlocked = true;
           uiFlags.passwordError = "";
           render();
@@ -3923,9 +3989,9 @@
       if(newPw1.length < 4){ uiFlags.passwordError = "비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
       if(newPw1 !== newPw2){ uiFlags.passwordError = "비밀번호가 서로 달라요."; renderPasswordModal(); return; }
       sha256Hex(newPw1).then(function(hash){
-        state.personalPasswordHash = hash;
+        // 비밀번호는 가계부 상태가 아니라 이 기기에만 저장한다. saveState()가 아니다.
+        setPersonalPasswordHash(hash);
         personalUnlocked = true;
-        saveState();
         uiFlags.showPasswordSetup = false;
         uiFlags.passwordError = "";
         renderPasswordModal();
@@ -3938,7 +4004,7 @@
       var chgPw1 = fd.get("newcode1") || "";
       var chgPw2 = fd.get("newcode2") || "";
       sha256Hex(curPw).then(function(curHash){
-        if(curHash !== state.personalPasswordHash){
+        if(curHash !== getPersonalPasswordHash()){
           uiFlags.passwordError = "현재 비밀번호가 올바르지 않아요.";
           renderPasswordModal();
           return;
@@ -3946,11 +4012,12 @@
         if(chgPw1.length < 4){ uiFlags.passwordError = "새 비밀번호는 4자 이상으로 설정해주세요."; renderPasswordModal(); return; }
         if(chgPw1 !== chgPw2){ uiFlags.passwordError = "새 비밀번호가 서로 달라요."; renderPasswordModal(); return; }
         sha256Hex(chgPw1).then(function(newHash){
-          state.personalPasswordHash = newHash;
-          saveState();
+          setPersonalPasswordHash(newHash);
           uiFlags.showPasswordSetup = false;
           uiFlags.passwordError = "";
           renderPasswordModal();
+          // 바뀐 상태가 화면에 바로 보이도록 다시 그린다(예전에는 자물쇠 표시가 그대로였다).
+          render();
         });
       });
       return;
@@ -3958,16 +4025,18 @@
     if(action === "submit-remove-password"){
       var curPw2 = fd.get("curcode") || "";
       sha256Hex(curPw2).then(function(curHash2){
-        if(curHash2 !== state.personalPasswordHash){
+        if(curHash2 !== getPersonalPasswordHash()){
           uiFlags.passwordError = "비밀번호가 올바르지 않아요.";
           renderPasswordModal();
           return;
         }
-        state.personalPasswordHash = "";
-        saveState();
+        setPersonalPasswordHash("");
         uiFlags.showPasswordSetup = false;
         uiFlags.passwordError = "";
         renderPasswordModal();
+        // 해제한 순간 자물쇠 표시가 풀린 모양으로 바뀌고, 막아두었던 내보내기·가져오기도
+        // 바로 돌아온다.
+        render();
       });
       return;
     }
