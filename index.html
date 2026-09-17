@@ -2130,6 +2130,74 @@
       });
     }
   }
+  // 내역 줄(개인 기록·생활비 내역·저축 사용 내역)을 한 군데서 찾는다. 세 탭이 저장 위치와
+  // 화면 갱신 함수만 다르고 나머지 규칙은 같아서, 같은 코드를 세 벌 두지 않는다.
+  function findTxByAction(action, el){
+    if(action.indexOf("edit-tx-") === 0){
+      var accId = el.dataset.account;
+      return {
+        tx: getLog(accId).find(function(t){ return t.id === el.dataset.id; }),
+        refresh: function(){ updatePersonalBalanceDisplay(accId); }
+      };
+    }
+    if(action.indexOf("edit-living-tx-") === 0){
+      var lm = getLivingMonth(state.currentMonth);
+      return {
+        tx: (lm.tx || []).find(function(t){ return t.id === el.dataset.id; }),
+        refresh: updateLivingDisplay
+      };
+    }
+    if(action.indexOf("edit-savings-tx-") === 0){
+      var sm = getSavingsMonth(state.currentMonth);
+      return {
+        tx: (sm.tx || []).find(function(t){ return t.id === el.dataset.id; }),
+        refresh: updateSavingsDisplay
+      };
+    }
+    return null;
+  }
+
+  // 내역 줄에 치던 값을 화면이 사라지기 전에 저장한다.
+  //
+  // 금액·메모는 치는 도중에도 저장되지만 날짜는 8자리가 다 채워져야 유효해서 그때까지
+  // 저장하지 않는다. 그리고 뒤로가기나 탭을 누르면 render()가 그 입력칸을 통째로 없애버려서,
+  // 손을 뗄 때 저장되는 경로(change)가 아예 오지 않는 경우가 있다. 그러면 고친 값이 조용히
+  // 사라진다 — 6,000원을 3,000원으로 고치고 나갔다 들어오면 다시 6,000원이었다.
+  //
+  // 0이나 빈 금액, 8자리가 안 된 날짜는 저장하지 않는다. 지우는 중인 한순간을 굳혀버리면
+  // 고치려던 값이 0원이나 빈 날짜로 남는다.
+  function commitPendingTxEdits(){
+    if(!main) return;
+    var changed = false;
+    main.querySelectorAll('[data-action^="edit-tx-"], [data-action^="edit-living-tx-"], [data-action^="edit-savings-tx-"]').forEach(function(el){
+      var action = el.dataset.action || "";
+      var found = findTxByAction(action, el);
+      if(!found || !found.tx) return;
+      var t = found.tx;
+      if(action.slice(-5) === "-date"){
+        var d = parseDotDateToISO(el.value);
+        if(d && d !== t.date){ t.date = d; changed = true; }
+      } else if(action.slice(-7) === "-amount"){
+        var a = Math.abs(parseMoneyValue(el.value));
+        if(a > 0 && a !== t.amount){ t.amount = a; changed = true; }
+      } else if(action.slice(-5) === "-memo"){
+        var m = el.value.trim();
+        if(m !== (t.memo || "")){ t.memo = m; changed = true; }
+      }
+    });
+    if(changed) saveState();
+  }
+
+  // 화면이 바뀌기 전에 치던 값을 모두 저장한다. 빠뜨린 자리가 생기지 않게 한 군데로 모았다.
+  function commitPendingAll(){
+    commitPendingUtilityFields();
+    commitPendingSavingsFields();
+    commitPendingLivingFields();
+    commitPendingLoanFields();
+    commitPendingPersonalFields();
+    commitPendingTxEdits();
+  }
+
   function commitPendingPersonalFields(){
     if(state.activeTab !== "personal") return;
     var expandedAccountId = state.accounts.reduce(function(found, a){ return found || (uiFlags.expandedAccounts[a.id] ? a.id : null); }, null);
@@ -3321,11 +3389,7 @@
     // 아직 커밋되지 않은 입력이 있는지 보려면 커밋 전후를 비교해야 한다.
     var before = null;
     try{ before = JSON.stringify(state); }catch(e){ before = null; }
-    commitPendingUtilityFields();
-    commitPendingSavingsFields();
-    commitPendingLivingFields();
-    commitPendingLoanFields();
-    commitPendingPersonalFields();
+    commitPendingAll();
     var changed = true;
     if(before !== null){
       try{ changed = JSON.stringify(state) !== before; }catch(e){ changed = true; }
@@ -3351,11 +3415,7 @@
     btn.addEventListener("click", function(){
       if(btn.dataset.tab === state.activeTab) return;
       if(state.activeTab === "personal") personalUnlocked = false;
-      commitPendingUtilityFields();
-      commitPendingSavingsFields();
-      commitPendingLivingFields();
-      commitPendingLoanFields();
-      commitPendingPersonalFields();
+      commitPendingAll();
       // 탭마다 보고 있던 달을 따로 기억한다. (생활비에서 8월을 보다 관리비로 가면
       // 관리비는 관리비가 보고 있던 달 그대로여야 한다)
       if(MONTH_TABS.indexOf(state.activeTab) >= 0) state.monthByTab[state.activeTab] = state.currentMonth;
@@ -3645,7 +3705,7 @@
       return;
     }
     if(action === "toggle-savings-month"){
-      commitPendingSavingsFields();
+      commitPendingAll();
       if(el.dataset.id){
         state.currentMonth = el.dataset.id;
         uiFlags.savingsExpanded = true;
@@ -3655,12 +3715,12 @@
       saveState(); render(); return;
     }
     if(action === "savings-year-prev"){
-      commitPendingSavingsFields();
+      commitPendingAll();
       state.currentMonth = shiftMonth(state.currentMonth, -12);
       saveState(); render(); return;
     }
     if(action === "savings-year-next"){
-      commitPendingSavingsFields();
+      commitPendingAll();
       state.currentMonth = shiftMonth(state.currentMonth, 12);
       saveState(); render(); return;
     }
@@ -3692,6 +3752,7 @@
     }
 
     if(action === "toggle-loan"){
+      commitPendingTxEdits();
       var toggleLoanId = el.dataset.id;
       var pendingLoan = state.loans.find(function(l){ return l.id === toggleLoanId; });
       if(pendingLoan){
@@ -3712,6 +3773,10 @@
     }
 
     if(action === "toggle-log"){
+      // 뒤로가기·카드 누르기로 화면이 다시 그려지기 전에, 내역 줄에 치던 값을 먼저 저장한다.
+      // 이걸 빼면 6,000원을 3,000원으로 고치고 뒤로가기를 누른 순간 그 입력칸이 사라져,
+      // 손 뗄 때 저장되는 경로가 오지 않아 고친 값이 조용히 되돌아간다.
+      commitPendingTxEdits();
       var toggleId = el.dataset.id;
       var pendingInput = main.querySelector('.mp-balance-edit[data-id="' + toggleId + '"]');
       if(pendingInput){
@@ -3753,8 +3818,8 @@
       saveState(); render(); return;
     }
 
-    if(action === "month-prev"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
-    if(action === "month-next"){ commitPendingUtilityFields(); commitPendingSavingsFields(); commitPendingLivingFields(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    if(action === "month-prev"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
+    if(action === "month-next"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
     if(action === "set-utility-chart-field"){
       uiFlags.utilityChartField = el.dataset.field;
@@ -3762,7 +3827,7 @@
       return;
     }
     if(action === "toggle-utility-form"){
-      commitPendingUtilityFields();
+      commitPendingAll();
       saveState();
       uiFlags.showUtilityForm = !uiFlags.showUtilityForm;
       render();
@@ -3872,6 +3937,17 @@
       liveUpdateLoanFromDOM(el.dataset.id);
       return;
     }
+    // 내역 메모도 치는 도중에 저장한다. 손을 뗄 때만 저장하면, 고치고 바로 뒤로가기나 탭을
+    // 누를 때 그 입력칸이 사라져 고친 내용이 조용히 되돌아간다. 메모는 형식 제한이 없어
+    // 중간 상태를 저장해도 잃을 것이 없다. saveState()는 화면을 다시 그리지 않는다.
+    if(/^edit-(tx|living-tx|savings-tx)-memo$/.test(el.dataset.action || "")){
+      var memoFound = findTxByAction(el.dataset.action, el);
+      if(memoFound && memoFound.tx){
+        memoFound.tx.memo = el.value.trim();
+        saveState();
+      }
+      return;
+    }
     if(!el.classList || !el.classList.contains("mp-money")) return;
     var caret = el.selectionStart;
     var oldVal = el.value;
@@ -3968,6 +4044,28 @@
           liveBarEl.className = "mp-progress " + liveBarClass;
           var liveFillEl = liveBarEl.querySelector("div");
           if(liveFillEl) liveFillEl.style.width = livePct + "%";
+        }
+      }
+    }
+
+    // 내역 금액도 치는 도중에 저장하고 합계를 같이 움직인다. 예전에는 손을 뗄 때만 저장돼서
+    // 두 가지가 어긋났다 — 고치는 동안 총 보유자산이 그대로였고, 고치고 바로 뒤로가기나 탭을
+    // 누르면 그 입력칸이 사라져 고친 값이 되돌아갔다.
+    //
+    // 0이나 빈 값은 저장하지 않는다. 지우고 새로 치는 중의 한순간을 0원으로 굳혀버리면,
+    // 그때 화면을 벗어나면 기록이 0원으로 남는다. 손을 뗄 때 처리(change)가 0이면 이전 값을
+    // 되돌려 주므로 여기서는 그냥 넘기면 된다.
+    //
+    // 갱신 함수(refresh)는 숫자만 갈아끼우고 화면을 다시 그리지 않으므로, 치던 입력칸과
+    // 커서가 그대로 남는다.
+    if(/^edit-(tx|living-tx|savings-tx)-amount$/.test(el.dataset.action || "")){
+      var amtFound = findTxByAction(el.dataset.action, el);
+      if(amtFound && amtFound.tx){
+        var liveTxAmt = Math.abs(parseMoneyValue(el.value));
+        if(liveTxAmt > 0){
+          amtFound.tx.amount = liveTxAmt;
+          saveState();
+          amtFound.refresh();
         }
       }
     }
@@ -4286,9 +4384,7 @@
     }
 
     if(action === "goto-month"){
-      commitPendingUtilityFields();
-      commitPendingSavingsFields();
-      commitPendingLivingFields();
+      commitPendingAll();
       var gy = fd.get("year");
       var gm = String(fd.get("month")).padStart(2, "0");
       state.currentMonth = gy + "-" + gm;
