@@ -362,6 +362,18 @@
   .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
+  /* 회차 기준일: 입력칸 바로 아래에 붙어 "몇 회차가 언제인지"를 알려준다.
+     비어 있으면(시작일도 회차도 없을 때) 자리를 차지하지 않는다. */
+  .mp-loan-basis{
+    font-size:.72rem; color:var(--accent); font-weight:700; margin-top:5px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-loan-basis:empty{ display:none; }
+  .mp-loan-end{
+    font-size:.78rem; color:var(--ink); font-weight:700; margin-top:3px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-loan-end:empty{ display:none; }
   .mp-loan-input{ width:100%; }
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
@@ -2256,6 +2268,17 @@
       loanStatsEl.innerHTML = '변제 금액 <b>' + won(liveRepaid) + '</b>' +
         (liveTotalInst > 0 ? (' · 총 ' + liveTotalInst + '회 중 잔여 ' + liveRemainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
     }
+    // 회차를 치는 동안 기준일이 같이 따라오게 한다. 회차 숫자만 바꿔도 날짜가 바로 보여야
+    // 어느 회차를 적는 중인지 확인할 수 있다.
+    var loanBasisEl = loanCard.querySelector(".mp-loan-basis");
+    if(loanBasisEl) loanBasisEl.textContent = loanInstallmentBasisText(loLive, liveInstallment);
+    // 대출 금액을 치면 총 회차가 달라지므로 끝나는 날도 같이 다시 센다.
+    var loanEndEl = loanCard.querySelector(".mp-loan-end");
+    if(loanEndEl){
+      loanEndEl.textContent = (loLive.startDate && liveTotalInst > 0)
+        ? ("마지막 " + liveTotalInst + "회차 " + fmtDateDots(loanInstallmentDate(loLive, liveTotalInst)) + "에 끝나요")
+        : "";
+    }
     var loanHeroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
     if(loanHeroTotalEl){
       var liveGrandTotal = state.loans.reduce(function(s,l){ return s + (l.id === loLive.id ? liveRemaining : loanRemaining(l)); }, 0);
@@ -2301,6 +2324,10 @@
         statsEl.innerHTML = '변제 금액 <b>' + won(repaid) + '</b>' +
           (totalInst > 0 ? (' · 총 ' + totalInst + '회 중 잔여 ' + remainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
       }
+      var basisEl = card.querySelector(".mp-loan-basis");
+      if(basisEl) basisEl.textContent = loanInstallmentBasisText(loan, loan.currentInstallment);
+      var endEl = card.querySelector(".mp-loan-end");
+      if(endEl) endEl.textContent = loanEndText(loan);
     }
     var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
     if(heroTotalEl){
@@ -2458,6 +2485,47 @@
     var t = loanTotalInstallments(loan);
     if(t <= 0) return 0;
     return Math.max(0, t - Number(loan.currentInstallment||0));
+  }
+
+  // 회차 날짜 계산 ----------------------------------------------------------
+  //
+  // **시작일이 곧 1회차 상환일이다.** 그래서 N회차는 시작일에서 (N-1)달 뒤이고,
+  // 마지막 회차는 시작일에서 (총 회차-1)달 뒤다. 이 기준은 사용자가 정한 것이다 —
+  // "대출이 나온 날이 시작일이고 첫 상환은 한 달 뒤"로 바꾸면 모든 날짜가 한 달씩 밀린다.
+
+  // 같은 날짜로 몇 달 뒤를 구한다. 그 달에 같은 날이 없으면(1월 31일에서 한 달 뒤 등)
+  // 그 달 마지막 날로 맞춘다 — 날짜 입력칸과 같은 규칙이다.
+  function addMonthsKeepDay(iso, months){
+    var p = String(iso || "").split("-");
+    if(p.length !== 3) return "";
+    var y = parseInt(p[0], 10), mo = parseInt(p[1], 10), da = parseInt(p[2], 10);
+    if(!isFinite(y) || !isFinite(mo) || !isFinite(da)) return "";
+    var base = new Date(y, mo - 1 + months, 1);
+    var lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    return base.getFullYear() + "-" +
+      String(base.getMonth() + 1).padStart(2, "0") + "-" +
+      String(Math.min(da, lastDay)).padStart(2, "0");
+  }
+  function loanInstallmentDate(loan, n){
+    if(!loan || typeof loan.startDate !== "string" || !loan.startDate) return "";
+    var num = Math.floor(Number(n));
+    if(!isFinite(num) || num < 1) return "";
+    return addMonthsKeepDay(loan.startDate, num - 1);
+  }
+  // 현재 회차 아래에 붙는 한 줄. 시작일이 없으면 어디서 넣는지 알려준다.
+  function loanInstallmentBasisText(loan, inst){
+    if(!loan.startDate) return "시작일을 넣으면 회차 날짜가 보여요 (위 ✎ 버튼)";
+    var num = Math.max(0, Math.floor(Number(inst) || 0));
+    if(num < 1) return "아직 0회차 · 1회차는 " + fmtDateDots(loan.startDate);
+    var d = loanInstallmentDate(loan, num);
+    return d ? (num + "회차 " + fmtDateDots(d) + " 기준") : "";
+  }
+  // 마지막 회차가 언제인지. 월 상환액이 없으면 총 회차를 알 수 없어 빈 문자열이다.
+  function loanEndText(loan){
+    var total = loanTotalInstallments(loan);
+    if(!loan.startDate || total <= 0) return "";
+    var d = loanInstallmentDate(loan, total);
+    return d ? ("마지막 " + total + "회차 " + fmtDateDots(d) + "에 끝나요") : "";
   }
   function fmtDateDots(iso){
     if(!iso) return "";
@@ -3314,11 +3382,13 @@
           '<div class="mp-balance-field" style="margin-top:10px;">' +
             '<div class="mp-balance-label">현재 회차</div>' +
             '<input type="number" inputmode="numeric" class="mp-balance-edit" data-action="set-loan-installment" data-id="' + expandedLoan.id + '" value="' + Number(expandedLoan.currentInstallment||0) + '" placeholder="0" min="0" step="1" style="width:100%;">' +
+            '<div class="mp-loan-basis">' + esc(loanInstallmentBasisText(expandedLoan, expandedLoan.currentInstallment)) + '</div>' +
           '</div>' +
           '<div class="mp-loan-stats">' +
             '변제 금액 <b>' + won(repaid0) + '</b>' +
             (totalInst0 > 0 ? (' · 총 ' + totalInst0 + '회 중 잔여 ' + remainInst0 + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요') +
           '</div>' +
+          '<div class="mp-loan-end">' + esc(loanEndText(expandedLoan)) + '</div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           (editingSettings0 ? (
