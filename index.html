@@ -2356,7 +2356,7 @@
     var loanEndEl = loanCard.querySelector(".mp-loan-end");
     if(loanEndEl){
       loanEndEl.textContent = (loLive.startDate && liveTotalInst > 0)
-        ? ("마지막 " + liveTotalInst + "회차 " + fmtDateDots(loanInstallmentDate(loLive, liveTotalInst)) + "에 끝나요")
+        ? ("마지막 " + liveTotalInst + "회차 " + fmtDateDotsRead(loanInstallmentDate(loLive, liveTotalInst)) + "에 끝나요")
         : "";
     }
     var loanHeroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
@@ -2596,22 +2596,32 @@
   function loanInstallmentBasisText(loan, inst){
     if(!loan.startDate) return "시작일을 넣으면 회차 날짜가 보여요 (위 ✎ 버튼)";
     var num = Math.max(0, Math.floor(Number(inst) || 0));
-    if(num < 1) return "아직 0회차 · 1회차는 " + fmtDateDots(loan.startDate);
+    if(num < 1) return "아직 0회차 · 1회차는 " + fmtDateDotsRead(loan.startDate);
     var d = loanInstallmentDate(loan, num);
-    return d ? (num + "회차 " + fmtDateDots(d) + " 기준") : "";
+    return d ? (num + "회차 " + fmtDateDotsRead(d) + " 기준") : "";
   }
   // 마지막 회차가 언제인지. 월 상환액이 없으면 총 회차를 알 수 없어 빈 문자열이다.
   function loanEndText(loan){
     var total = loanTotalInstallments(loan);
     if(!loan.startDate || total <= 0) return "";
     var d = loanInstallmentDate(loan, total);
-    return d ? ("마지막 " + total + "회차 " + fmtDateDots(d) + "에 끝나요") : "";
+    return d ? ("마지막 " + total + "회차 " + fmtDateDotsRead(d) + "에 끝나요") : "";
   }
   function fmtDateDots(iso){
     if(!iso) return "";
     var p = iso.split("-");
     if(p.length !== 3) return iso;
     return p[0] + "." + p[1] + "." + p[2];
+  }
+  // 읽으라고 내놓는 날짜는 한국어 표기대로 끝에 점을 붙인다(2026.09.23.).
+  // 날짜 입력칸에는 절대 쓰지 않는다 — 입력칸은 8자리(YYYYMMDD)만 받고 maxlength가 10이라
+  // 끝점이 붙으면 parseDotDateToISO()가 못 읽고, 마지막 글자가 잘려 저장이 어긋난다.
+  // 그래서 fmtDateDots()와 일부러 따로 둔다.
+  function fmtDateDotsRead(iso){
+    if(!iso) return "";
+    var p = iso.split("-");
+    if(p.length !== 3) return iso;
+    return p[0] + "." + p[1] + "." + p[2] + ".";
   }
   // 날짜 칸의 "2026.02.31" 같은 값을 ISO 날짜로 바꾼다.
   // - 8자리(YYYYMMDD)가 다 채워지지 않으면 null을 돌려준다. "치는 도중"(2026, 2026.1 …)은
@@ -3446,7 +3456,7 @@
               '<button class="mp-icon-btn mp-edit-icon" data-action="delete-loan" data-id="' + expandedLoan.id + '" title="대출 삭제">✕</button>' +
             '</span>' +
           '</div>' +
-          (expandedLoan.startDate ? '<div class="mp-account-purpose">' + fmtDateDots(expandedLoan.startDate) + ' 시작</div>' : '') +
+          (expandedLoan.startDate ? '<div class="mp-account-purpose">' + fmtDateDotsRead(expandedLoan.startDate) + ' 시작</div>' : '') +
           '<div class="mp-balance-field mp-loan-amount">' +
             '<div class="mp-balance-label">대출 금액</div>' +
             '<div class="mp-balance-input-row">' +
