@@ -68,7 +68,9 @@
       "id": "문자열", "name": "문자열",
       "originalAmount": 양수, "monthlyPayment": 양수,
       "currentInstallment": 0 이상 정수,
-      "rate": "문자열", "startDate": "YYYY-MM-DD"|""
+      "rate": "문자열", "startDate": "YYYY-MM-DD"|"",
+      "repayType": "amortized" (없으면 예전 방식),
+      "endDate": "YYYY-MM-DD"|"" (원리금균등의 만기일)
   } ],
 
   "fixedItemsByTab": {

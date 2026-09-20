@@ -403,6 +403,18 @@
     font-variant-numeric:tabular-nums;
   }
   .mp-loan-end:empty{ display:none; }
+  /* 그 회차에서 원금과 이자가 어떻게 나뉘는지. 기준일 줄 바로 아래에 딸려 붙는다. */
+  .mp-loan-split{
+    font-size:.72rem; color:var(--muted); margin-top:2px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-loan-split:empty{ display:none; }
+  /* 만기일 칸 아래 안내. 넣은 날짜로 총 회차가 몇 회가 되는지 그 자리에서 보여준다. */
+  .mp-loan-hint{
+    font-size:.7rem; color:var(--muted); margin-top:4px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-loan-hint:empty{ display:none; }
   .mp-loan-input{ width:100%; }
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
@@ -782,6 +794,27 @@
   var todayISO = new Date().toISOString().slice(0,10);
   var currentMonthKey = todayISO.slice(0,7);
 
+  // 대출 상환 방식 -----------------------------------------------------------
+  //
+  // 두 가지가 있고 계산이 완전히 다르다.
+  //
+  // - 값이 없는 대출(예전부터 있던 것) = **월 상환액이 전부 원금**이다.
+  //   잔여 = 원금 − 월 상환액 × 회차. 이자를 따로 세지 않는다.
+  // - "amortized" = **원리금균등**. 월 상환액은 그대로인데 그 안에서 이자가 줄고 원금이
+  //   늘어난다. 주택담보대출이 보통 이 방식이고, 위 식으로 계산하면 이자까지 원금을 갚은
+  //   것으로 세서 잔액이 실제보다 한참 적게 나온다.
+  //
+  // 값이 없으면 예전 방식이다. 이미 적어둔 대출의 숫자가 이 기능 때문에 바뀌면 안 된다.
+  //
+  // **이 자리에 두는 이유:** normalizeState()가 이 값으로 repayType을 검사하고, 그 호출은
+  // var state = loadState()에서 일어난다. 계산 함수들 옆(아래쪽)에 두면 var 대입이 아직
+  // 실행되기 전이라 undefined가 되고, 저장된 repayType이 지워진 채 저장까지 된다.
+  // 함수 선언과 달리 var 대입은 호이스팅되지 않는다.
+  var LOAN_REPAY_AMORTIZED = "amortized";
+  // 회차 상한. 원금·금리·만기일에 이상한 값이 들어와도 계산이 오래 돌지 않게 막는다.
+  // 1200회 = 100년이라, 실제 대출은 여기에 걸리지 않는다.
+  var LOAN_MAX_INSTALLMENTS = 1200;
+
   function uid(){
     if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -1122,6 +1155,14 @@
       if(typeof a.id !== "string" || !a.id){ a.id = uid(); report.fixed++; }
     });
     s.loans.forEach(function(l){
+      // 상환 방식은 아는 값 하나뿐이다. 그 밖(글자·숫자·빈 값)은 칸을 없앤다 = 예전 방식.
+      // 없던 칸을 만들지는 않는다 — 예전 대출은 값이 없는 것이 정상이다.
+      if(("repayType" in l) && l.repayType !== LOAN_REPAY_AMORTIZED){
+        delete l.repayType; report.fixed++;
+      }
+      // 만기일이 날짜 글자가 아니면 빈 값으로 둔다. fmtDateDots()가 .split()을 부르다
+      // 터지면 대출 탭이 통째로 안 그려진다.
+      if(("endDate" in l) && typeof l.endDate !== "string"){ l.endDate = ""; report.fixed++; }
       if(typeof l.id !== "string" || !l.id){ l.id = uid(); report.fixed++; }
     });
 
@@ -2317,6 +2358,11 @@
       totalEl.classList.toggle("neg", total < 0);
     }
   }
+  // 치는 도중 갱신. state는 건드리지 않고, 입력칸 값만 갈아끼운 **가상의 대출**을 만들어
+  // 공용 그리기 함수에 넘긴다. 저장은 change/focusout에서 한다.
+  //
+  // 예전에는 이 함수가 계산을 한 벌 더 갖고 있었다. 원리금균등이 붙으면서 계산이 방식별로
+  // 갈라지므로, 한쪽만 고쳐져 숫자가 갈리지 않게 paintLoanCard() 하나로 모았다.
   function liveUpdateLoanFromDOM(loanId){
     var loanCard = document.querySelector("#mp-main .mp-account.is-expanded");
     if(!loanCard) return;
@@ -2324,48 +2370,74 @@
     if(!loLive) return;
     var origInput = loanCard.querySelector('[data-action="set-loan-original"]');
     var instInput = loanCard.querySelector('[data-action="set-loan-installment"]');
-    var liveOriginal = origInput ? Math.abs(parseMoneyValue(origInput.value)) : loLive.originalAmount;
-    var liveInstallment = instInput ? Math.max(0, parseInt(instInput.value, 10) || 0) : loLive.currentInstallment;
-    var liveRepaid = liveInstallment * Number(loLive.monthlyPayment||0);
-    var liveRemaining = liveOriginal - liveRepaid;
-    var loanTotalEl = loanCard.querySelector(".mp-loan-amount .mp-account-total");
-    if(loanTotalEl){
-      loanTotalEl.textContent = won(liveRemaining);
-      loanTotalEl.classList.toggle("neg", liveRemaining < 0);
+    var live = Object.assign({}, loLive);
+    if(origInput) live.originalAmount = Math.abs(parseMoneyValue(origInput.value));
+    if(instInput) live.currentInstallment = Math.max(0, parseInt(instInput.value, 10) || 0);
+    paintLoanCard(loanCard, live);
+    paintLoanHeroTotal(live);
+  }
+
+  // 현재 회차 줄 아래에 붙는 한 줄. 그 회차에서 원금과 이자가 어떻게 나뉘는지 보여준다.
+  // 원리금균등에서만 나온다 — 다른 방식은 월 상환액이 전부 원금이라 나눌 것이 없다.
+  function loanSplitText(loan, inst){
+    if(!isAmortizedLoan(loan)) return "";
+    var num = Math.max(0, Math.floor(Number(inst) || 0));
+    if(num < 1) return "";
+    if(Number(loan.monthlyPayment||0) <= 0) return "월 상환액을 넣으면 원금·이자가 나뉘어 보여요";
+    if(loanMonthlyRate(loan) <= 0) return "금리를 넣으면 원금·이자가 나뉘어 보여요";
+    var a = loanAmortize(loan, num);
+    if(a.stalled) return "월 상환액이 한 달 이자보다 적어요 — 이대로면 원금이 줄지 않습니다";
+    if(a.payment <= 0) return "";
+    return "원금 " + won(a.principal) + " · 이자 " + won(a.interest);
+  }
+  // 변제 현황 한 줄. 방식에 따라 이름과 안내가 달라진다.
+  function loanStatsHTML(loan){
+    var totalInst = loanTotalInstallments(loan);
+    var tail;
+    if(totalInst > 0) tail = " · 총 " + totalInst + "회 중 잔여 " + loanRemainingInstallments(loan) + "회";
+    else if(isAmortizedLoan(loan)) tail = " · 만기일을 입력하면 잔여 회차가 표시돼요";
+    else tail = " · 월 상환액을 입력하면 잔여 회차가 표시돼요";
+    return (isAmortizedLoan(loan) ? "갚은 원금 " : "변제 금액 ") +
+      "<b>" + won(loanRepaid(loan)) + "</b>" + tail;
+  }
+  // 카드 안 숫자들을 갈아끼우는 단 하나의 자리. 저장 뒤 갱신과 치는 도중 갱신이 같이 쓴다.
+  function paintLoanCard(card, loan){
+    if(!card || !loan) return;
+    var remaining = loanRemaining(loan);
+    var totalEl = card.querySelector(".mp-loan-amount .mp-account-total");
+    if(totalEl){
+      totalEl.textContent = won(remaining);
+      totalEl.classList.toggle("neg", remaining < 0);
     }
-    // 상환 게이지도 같이 움직인다
-    var loanBarEl = loanCard.querySelector(".mp-progress");
-    if(loanBarEl){
-      var liveBar = loanBarState(liveOriginal, liveRepaid);
-      loanBarEl.className = "mp-progress " + liveBar.cls;
-      var loanFillEl = loanBarEl.querySelector("div");
-      if(loanFillEl) loanFillEl.style.width = liveBar.pct + "%";
+    var barEl = card.querySelector(".mp-progress");
+    if(barEl){
+      var bar = loanBarState(loan.originalAmount, loanRepaid(loan));
+      barEl.className = "mp-progress " + bar.cls;
+      var fillEl = barEl.querySelector("div");
+      if(fillEl) fillEl.style.width = bar.pct + "%";
     }
-    var liveTotalInst = Number(loLive.monthlyPayment||0) > 0 ? Math.ceil(liveOriginal / Number(loLive.monthlyPayment)) : 0;
-    var liveRemainInst = liveTotalInst > 0 ? Math.max(0, liveTotalInst - liveInstallment) : 0;
-    var loanStatsEl = loanCard.querySelector(".mp-loan-stats");
-    if(loanStatsEl){
-      loanStatsEl.innerHTML = '변제 금액 <b>' + won(liveRepaid) + '</b>' +
-        (liveTotalInst > 0 ? (' · 총 ' + liveTotalInst + '회 중 잔여 ' + liveRemainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
-    }
-    // 회차를 치는 동안 기준일이 같이 따라오게 한다. 회차 숫자만 바꿔도 날짜가 바로 보여야
-    // 어느 회차를 적는 중인지 확인할 수 있다.
-    var loanBasisEl = loanCard.querySelector(".mp-loan-basis");
-    if(loanBasisEl) loanBasisEl.textContent = loanInstallmentBasisText(loLive, liveInstallment);
+    var statsEl = card.querySelector(".mp-loan-stats");
+    if(statsEl) statsEl.innerHTML = loanStatsHTML(loan);
+    // 회차를 치는 동안 기준일과 원금·이자가 같이 따라오게 한다. 회차 숫자만 바꿔도 바로
+    // 보여야 어느 회차를 적는 중인지 확인할 수 있다.
+    var basisEl = card.querySelector(".mp-loan-basis");
+    if(basisEl) basisEl.textContent = loanInstallmentBasisText(loan, loan.currentInstallment);
+    var splitEl = card.querySelector(".mp-loan-split");
+    if(splitEl) splitEl.textContent = loanSplitText(loan, loan.currentInstallment);
     // 대출 금액을 치면 총 회차가 달라지므로 끝나는 날도 같이 다시 센다.
-    var loanEndEl = loanCard.querySelector(".mp-loan-end");
-    if(loanEndEl){
-      loanEndEl.textContent = (loLive.startDate && liveTotalInst > 0)
-        ? ("마지막 " + liveTotalInst + "회차 " + fmtDateDotsRead(loanInstallmentDate(loLive, liveTotalInst)) + "에 끝나요")
-        : "";
-    }
-    var loanHeroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
-    if(loanHeroTotalEl){
-      var liveGrandTotal = state.loans.reduce(function(s,l){ return s + (l.id === loLive.id ? liveRemaining : loanRemaining(l)); }, 0);
-      loanHeroTotalEl.textContent = won(liveGrandTotal);
-      loanHeroTotalEl.classList.toggle("neg", liveGrandTotal > 0);
-      loanHeroTotalEl.classList.toggle("pos", liveGrandTotal <= 0);
-    }
+    var endEl = card.querySelector(".mp-loan-end");
+    if(endEl) endEl.textContent = loanEndText(loan);
+  }
+  // 총 대출 잔액. live를 주면 그 대출만 치는 도중 값으로 바꿔 센다.
+  function paintLoanHeroTotal(live){
+    var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(!heroTotalEl) return;
+    var grandTotal = state.loans.reduce(function(s, l){
+      return s + loanRemaining(live && live.id === l.id ? live : l);
+    }, 0);
+    heroTotalEl.textContent = won(grandTotal);
+    heroTotalEl.classList.toggle("neg", grandTotal > 0);
+    heroTotalEl.classList.toggle("pos", grandTotal <= 0);
   }
   function commitPendingLoanFields(){
     if(state.activeTab !== "loan") return;
@@ -2377,45 +2449,21 @@
     if(originalInput) loan.originalAmount = Math.abs(parseMoneyValue(originalInput.value));
     var installmentInput = document.querySelector('[data-action="set-loan-installment"][data-id="' + expandedLoanId + '"]');
     if(installmentInput) loan.currentInstallment = Math.max(0, parseInt(installmentInput.value, 10) || 0);
+    // 날짜 칸은 치는 도중에 저장하지 않는다. 다 치고 탭을 옮기면 저장될 기회가 없으므로
+    // 여기서 한 번 더 훑는다. 무효하면 그냥 두고 이미 저장된 날짜를 건드리지 않는다.
+    ["startDate", "endDate"].forEach(function(field){
+      var dateInput = document.querySelector('[data-action="set-loan-' +
+        (field === "startDate" ? "startdate" : "enddate") + '"][data-id="' + expandedLoanId + '"]');
+      if(!dateInput) return;
+      var iso = parseDotDateToISO(dateInput.value);
+      if(iso) loan[field] = iso;
+    });
   }
   function updateLoanDisplay(loanId){
     var loan = state.loans.find(function(l){ return l.id === loanId; });
     if(!loan) return;
-    var card = document.querySelector("#mp-main .mp-account.is-expanded");
-    if(card){
-      var remaining = loanRemaining(loan);
-      var totalEl = card.querySelector(".mp-loan-amount .mp-account-total");
-      if(totalEl){
-        totalEl.textContent = won(remaining);
-        totalEl.classList.toggle("neg", remaining < 0);
-      }
-      var repaid = loanRepaid(loan);
-      var barEl = card.querySelector(".mp-progress");
-      if(barEl){
-        var bar = loanBarState(loan.originalAmount, repaid);
-        barEl.className = "mp-progress " + bar.cls;
-        var fillEl = barEl.querySelector("div");
-        if(fillEl) fillEl.style.width = bar.pct + "%";
-      }
-      var totalInst = loanTotalInstallments(loan);
-      var remainInst = loanRemainingInstallments(loan);
-      var statsEl = card.querySelector(".mp-loan-stats");
-      if(statsEl){
-        statsEl.innerHTML = '변제 금액 <b>' + won(repaid) + '</b>' +
-          (totalInst > 0 ? (' · 총 ' + totalInst + '회 중 잔여 ' + remainInst + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요');
-      }
-      var basisEl = card.querySelector(".mp-loan-basis");
-      if(basisEl) basisEl.textContent = loanInstallmentBasisText(loan, loan.currentInstallment);
-      var endEl = card.querySelector(".mp-loan-end");
-      if(endEl) endEl.textContent = loanEndText(loan);
-    }
-    var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
-    if(heroTotalEl){
-      var grandTotal = state.loans.reduce(function(s,l){ return s + loanRemaining(l); }, 0);
-      heroTotalEl.textContent = won(grandTotal);
-      heroTotalEl.classList.toggle("neg", grandTotal > 0);
-      heroTotalEl.classList.toggle("pos", grandTotal <= 0);
-    }
+    paintLoanCard(document.querySelector("#mp-main .mp-account.is-expanded"), loan);
+    paintLoanHeroTotal(null);
   }
   function commitPendingLivingFields(){
     if(state.activeTab !== "living") return;
@@ -2537,13 +2585,82 @@
     return Number(acc.balance||0) + delta;
   }
 
+  function isAmortizedLoan(loan){
+    return !!loan && loan.repayType === LOAN_REPAY_AMORTIZED;
+  }
+  // 금리 칸은 사람이 자유롭게 적는 곳이라 "3.9", "3.9%", "연 3.9" 같은 게 들어온다.
+  // 계산할 때만 숫자를 뽑아 쓰고 **저장된 글자는 건드리지 않는다** — 사용자가 적어둔
+  // 그대로 보여야 한다. 못 읽으면 0을 주고, 그러면 이자 계산을 하지 않는다.
+  function loanMonthlyRate(loan){
+    var m = String((loan && loan.rate) || "").match(/\d+(\.\d+)?/);
+    var pct = m ? parseFloat(m[0]) : 0;
+    if(!isFinite(pct) || pct <= 0) return 0;
+    if(pct > 100) pct = 100;
+    return pct / 100 / 12;
+  }
+  // 두 날짜가 몇 달 차이인지. 일자는 보지 않는다(회차 날짜는 addMonthsKeepDay가 맞춘다).
+  function monthsBetweenISO(isoA, isoB){
+    var a = String(isoA || "").split("-"), b = String(isoB || "").split("-");
+    if(a.length !== 3 || b.length !== 3) return NaN;
+    var ay = parseInt(a[0], 10), am = parseInt(a[1], 10);
+    var by = parseInt(b[0], 10), bm = parseInt(b[1], 10);
+    if(!isFinite(ay) || !isFinite(am) || !isFinite(by) || !isFinite(bm)) return NaN;
+    return (by - ay) * 12 + (bm - am);
+  }
+
+  // 원리금균등을 1회차부터 한 회차씩 굴린다.
+  //
+  // 매달 이자 = 남은 원금 × 월이율(원 단위로 반올림 — 은행 명세서가 원 단위다),
+  // 원금 상환액 = 월 상환액 − 이자. 그래서 갚을수록 이자가 줄고 원금이 늘어난다.
+  // 마지막 회차는 남은 원금보다 더 갚지 않도록 잘라낸다.
+  //
+  // 닫힌 식으로 바로 구하지 않고 하나씩 도는 이유: 매달 원 단위로 반올림하는 은행 계산과
+  // 어긋나기 때문이다. 회차는 LOAN_MAX_INSTALLMENTS로 막아 둔다.
+  function loanAmortize(loan, upto){
+    var original = Math.max(0, Number(loan && loan.originalAmount || 0));
+    var monthly = Math.max(0, Number(loan && loan.monthlyPayment || 0));
+    var i = loanMonthlyRate(loan);
+    var n = Math.floor(Number(upto) || 0);
+    if(!isFinite(n) || n < 0) n = 0;
+    if(n > LOAN_MAX_INSTALLMENTS) n = LOAN_MAX_INSTALLMENTS;
+    var r = { balance: original, repaidPrincipal: 0, principal: 0, interest: 0,
+              payment: 0, stalled: false, paidOff: false };
+    if(original <= 0 || monthly <= 0) return r;
+    var bal = original;
+    for(var k = 1; k <= n; k++){
+      var interest = Math.round(bal * i);
+      var principal = monthly - interest;
+      // 월 상환액이 한 달 이자보다 적으면 원금이 영원히 줄지 않는다. 멈추고 알린다.
+      if(principal <= 0){ r.stalled = true; break; }
+      if(principal >= bal){ principal = bal; bal = 0; }
+      else bal -= principal;
+      r.principal = principal; r.interest = interest; r.payment = principal + interest;
+      if(bal <= 0){ r.paidOff = true; break; }
+    }
+    r.balance = bal;
+    r.repaidPrincipal = original - bal;
+    return r;
+  }
+
+  // 갚은 원금. 원리금균등은 낸 돈이 아니라 **원금만** 센다 — 상환 게이지와 잔여 금액이
+  // 같은 기준을 써야 "게이지는 반인데 잔액은 그대로"가 되지 않는다.
   function loanRepaid(loan){
+    if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).repaidPrincipal;
     return Number(loan.currentInstallment||0) * Number(loan.monthlyPayment||0);
   }
   function loanRemaining(loan){
+    if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).balance;
     return Number(loan.originalAmount||0) - loanRepaid(loan);
   }
+  // 총 회차. 원리금균등은 월 상환액으로 나눠서 셀 수 없다(이자가 섞여 있다). 그래서
+  // 시작일과 만기일로 센다 — **시작일이 1회차, 만기일이 마지막 회차**다.
   function loanTotalInstallments(loan){
+    if(isAmortizedLoan(loan)){
+      if(!loan.startDate || !loan.endDate) return 0;
+      var months = monthsBetweenISO(loan.startDate, loan.endDate);
+      if(!isFinite(months) || months < 0) return 0;
+      return Math.min(months + 1, LOAN_MAX_INSTALLMENTS);
+    }
     var mp = Number(loan.monthlyPayment||0);
     if(mp <= 0) return 0;
     return Math.ceil(Number(loan.originalAmount||0) / mp);
@@ -2560,6 +2677,21 @@
     else if(pct >= 25) cls = "lv2";
     else cls = "lv1";
     return { pct: pct, cls: cls };
+  }
+  // 상환 방식 선택지. 값이 빈 것이 예전부터의 방식이다.
+  function loanRepayOptions(selected){
+    var amort = selected === LOAN_REPAY_AMORTIZED;
+    return '<option value=""' + (amort ? '' : ' selected') + '>월 상환액이 전부 원금</option>' +
+      '<option value="' + LOAN_REPAY_AMORTIZED + '"' + (amort ? ' selected' : '') + '>원금+이자 (원리금균등)</option>';
+  }
+  // 만기일 칸 아래 한 줄. 넣은 날짜로 총 회차가 몇 회가 되는지 바로 보여줘서, 은행에 적힌
+  // 회차 수와 다르면 그 자리에서 알아챌 수 있게 한다.
+  function loanTermHintText(loan){
+    if(!loan.startDate) return "1회차 상환일을 먼저 넣어주세요";
+    if(!loan.endDate) return "은행 앱의 '만기'를 그대로 넣어주세요";
+    var total = loanTotalInstallments(loan);
+    if(total <= 0) return "만기일이 1회차 상환일보다 빨라요";
+    return fmtDateDotsRead(loan.startDate) + " ~ " + fmtDateDotsRead(loan.endDate) + " · 총 " + total + "회차";
   }
   function loanRemainingInstallments(loan){
     var t = loanTotalInstallments(loan);
@@ -2603,7 +2735,14 @@
   // 마지막 회차가 언제인지. 월 상환액이 없으면 총 회차를 알 수 없어 빈 문자열이다.
   function loanEndText(loan){
     var total = loanTotalInstallments(loan);
-    if(!loan.startDate || total <= 0) return "";
+    if(!loan.startDate || total <= 0){
+      // 원리금균등은 만기일이 있어야 총 회차를 셀 수 있다. 만기일 칸은 ✎ 안에 있어서
+      // 못 찾기 쉬우므로 어디 있는지 알려준다(시작일 안내와 같은 이유다).
+      if(isAmortizedLoan(loan) && loan.startDate && !loan.endDate){
+        return "만기일을 넣으면 끝나는 날이 보여요 (위 ✎ 버튼)";
+      }
+      return "";
+    }
     var d = loanInstallmentDate(loan, total);
     return d ? ("마지막 " + total + "회차 " + fmtDateDotsRead(d) + "에 끝나요") : "";
   }
@@ -3434,6 +3573,7 @@
             '<input type="number" inputmode="numeric" name="currentInstallment" placeholder="회차" min="0" step="1" style="flex:1;">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="monthlyPayment" placeholder="월 상환액" style="flex:1;">' +
             '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
+            '<select name="repayType" style="flex:1 1 100%;">' + loanRepayOptions("") + '</select>' +
             '<button class="mp-btn small" type="submit">추가</button>' +
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-loan">취소</button>' +
           '</form>' :
@@ -3473,19 +3613,29 @@
             '<div class="mp-balance-label">현재 회차</div>' +
             '<input type="number" inputmode="numeric" class="mp-balance-edit" data-action="set-loan-installment" data-id="' + expandedLoan.id + '" value="' + Number(expandedLoan.currentInstallment||0) + '" placeholder="0" min="0" step="1" style="width:100%;">' +
             '<div class="mp-loan-basis">' + esc(loanInstallmentBasisText(expandedLoan, expandedLoan.currentInstallment)) + '</div>' +
+            '<div class="mp-loan-split">' + esc(loanSplitText(expandedLoan, expandedLoan.currentInstallment)) + '</div>' +
           '</div>' +
-          '<div class="mp-loan-stats">' +
-            '변제 금액 <b>' + won(repaid0) + '</b>' +
-            (totalInst0 > 0 ? (' · 총 ' + totalInst0 + '회 중 잔여 ' + remainInst0 + '회') : ' · 월 상환액을 입력하면 잔여 회차가 표시돼요') +
-          '</div>' +
+          '<div class="mp-loan-stats">' + loanStatsHTML(expandedLoan) + '</div>' +
           '<div class="mp-loan-end">' + esc(loanEndText(expandedLoan)) + '</div>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           (editingSettings0 ? (
             '<div class="mp-account-settings-panel">' +
-              '<div class="mp-detail-field"><div class="mp-label">대출기간 시작일</div>' +
+              '<div class="mp-detail-field"><div class="mp-label">상환 방식</div>' +
+                '<select class="mp-loan-input" data-action="set-loan-repaytype" data-id="' + expandedLoan.id + '">' +
+                  loanRepayOptions(expandedLoan.repayType) +
+                '</select>' +
+              '</div>' +
+              '<div class="mp-detail-field"><div class="mp-label">' + (isAmortizedLoan(expandedLoan) ? '1회차 상환일' : '대출기간 시작일') + '</div>' +
                 '<input type="text" inputmode="numeric" class="mp-date-input" data-action="set-loan-startdate" data-id="' + expandedLoan.id + '" value="' + (expandedLoan.startDate ? fmtDateDots(expandedLoan.startDate) : "") + '" placeholder="YYYY.MM.DD" maxlength="10">' +
               '</div>' +
+              // 만기일은 원리금균등에서만 쓴다. 다른 방식은 월 상환액으로 총 회차를 세므로
+              // 칸을 내놓으면 넣어도 아무 데도 안 쓰이는 칸이 된다.
+              (isAmortizedLoan(expandedLoan) ?
+                '<div class="mp-detail-field"><div class="mp-label">만기일 (마지막 회차)</div>' +
+                  '<input type="text" inputmode="numeric" class="mp-date-input" data-action="set-loan-enddate" data-id="' + expandedLoan.id + '" value="' + (expandedLoan.endDate ? fmtDateDots(expandedLoan.endDate) : "") + '" placeholder="YYYY.MM.DD" maxlength="10">' +
+                  '<div class="mp-loan-hint">' + esc(loanTermHintText(expandedLoan)) + '</div>' +
+                '</div>' : '') +
               '<div class="mp-loan-meta">' +
                 '<div class="mp-detail-field"><div class="mp-label">금리(%)</div>' +
                   '<input type="text" class="mp-loan-input" data-action="set-loan-rate" data-id="' + expandedLoan.id + '" value="' + esc(expandedLoan.rate||"") + '" placeholder="예: 3.5"></div>' +
@@ -4390,6 +4540,28 @@
       }
       return;
     }
+    if(action === "set-loan-repaytype"){
+      var loanP = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanP){
+        // 예전 방식은 칸을 아예 두지 않는다. ""로 남기면 "골랐는데 빈 값"과 구분이 안 된다.
+        if(el.value === LOAN_REPAY_AMORTIZED) loanP.repayType = LOAN_REPAY_AMORTIZED;
+        else delete loanP.repayType;
+        // 방식이 바뀌면 만기일 칸이 생기거나 사라지고 계산식도 달라진다. 드롭다운을 고른
+        // 직후라 입력 중이 아니므로 다시 그려도 키패드가 내려가지 않는다.
+        saveState(); render();
+      }
+      return;
+    }
+    if(action === "set-loan-enddate"){
+      var loanE = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanE){
+        var newEnd = parseDotDateToISO(el.value);
+        // 무효하면(8자리 미만 등) 저장된 만기일을 지우지 않고 화면 값을 되돌린다.
+        if(newEnd){ loanE.endDate = newEnd; saveState(); render(); }
+        else el.value = loanE.endDate ? fmtDateDots(loanE.endDate) : "";
+      }
+      return;
+    }
     if(action === "set-loan-installment"){
       var loanI = state.loans.find(function(l){ return l.id === el.dataset.id; });
       if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); updateLoanDisplay(loanI.id); }
@@ -4593,7 +4765,13 @@
       var loanOriginal = Math.abs(parseMoneyValue(fd.get("originalAmount")));
       var loanMonthly = Math.abs(parseMoneyValue(fd.get("monthlyPayment")));
       var loanInstallment = Math.max(0, parseInt(fd.get("currentInstallment"), 10) || 0);
-      state.loans.push({ id: uid(), name: loanName, originalAmount: loanOriginal, startDate: "", rate: loanRate, monthlyPayment: loanMonthly, currentInstallment: loanInstallment });
+      var newLoan = { id: uid(), name: loanName, originalAmount: loanOriginal, startDate: "", rate: loanRate, monthlyPayment: loanMonthly, currentInstallment: loanInstallment };
+      // 예전 방식이면 칸 자체를 만들지 않는다(값 없음 = 예전 방식).
+      if(fd.get("repayType") === LOAN_REPAY_AMORTIZED){
+        newLoan.repayType = LOAN_REPAY_AMORTIZED;
+        newLoan.endDate = "";
+      }
+      state.loans.push(newLoan);
       uiFlags.showAddLoan = false;
       saveState(); render(); return;
     }
