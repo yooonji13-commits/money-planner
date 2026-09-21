@@ -658,7 +658,8 @@
   .mp-tx-row .mp-tx-amt{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); white-space:nowrap; text-align:right; }
   .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
   /* 개인 탭: 날짜/내역/금액을 아이콘 없이 바로 탭해서 수정하는 행 (기준잔액과 같은 방식) */
-  .mp-tx-row-editable{ grid-template-columns:76px 1fr 78px 24px; }
+  /* 날짜 · 메모 · 금액 · 보류 · 삭제 */
+  .mp-tx-row-editable{ grid-template-columns:74px 1fr 76px 26px 20px; gap:5px; }
   .mp-tx-row-editable input{
     border:none; background:none; padding:2px 0; font-size:.8rem; font-family:var(--font-ui);
     color:var(--ink); height:auto; border-radius:4px;
@@ -669,6 +670,24 @@
   .mp-tx-row-editable .mp-tx-amount-edit{ font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative); text-align:right; }
   .mp-tx-row-editable .mp-tx-amount-edit.income{ color:var(--positive); }
   .mp-tx-row-editable .mp-icon-btn{ padding:2px; justify-self:end; }
+  /* 보류 버튼과 보류된 줄.
+     줄을 지우거나 숨기지 않는다 — 금액은 그대로 있고 총 보유자산에서만 빠진다는 뜻이
+     보여야 하므로, 글자에 줄을 긋고 흐리게 해서 "적혀 있지만 아직 안 셈"을 나타낸다. */
+  /* 손으로 누르는 단추라 칸보다 넉넉하게 잡는다. 줄의 위아래 여백(9px) 안쪽으로만
+     늘려서 칸 배치는 그대로 두고 누를 수 있는 넓이만 키운다. */
+  .mp-tx-row-editable .mp-hold-btn{
+    padding:7px 4px; margin:-5px 0; justify-self:center; opacity:.32; font-size:.8rem;
+  }
+  .mp-tx-row-editable .mp-hold-btn.is-on{ opacity:1; color:var(--accent); }
+  .mp-tx-row.is-held .mp-tx-date-edit,
+  .mp-tx-row.is-held .mp-tx-memo-edit,
+  .mp-tx-row.is-held .mp-tx-amount-edit{ text-decoration:line-through; opacity:.45; }
+  /* 총 보유자산 아래 보류 안내. 보류가 없으면 자리를 차지하지 않는다. */
+  .mp-held-note{
+    font-size:.68rem; color:var(--accent); font-weight:700; margin-top:3px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-held-note:empty{ display:none; }
   .mp-log-card{ padding:6px 16px; margin-top:4px; }
   .mp-log-card .mp-log{ margin-top:0; }
   .mp-log-card .mp-empty{ padding:16px 0; }
@@ -1044,6 +1063,13 @@
     // 엉뚱한 줄이 함께 사라진다. carryFrom("어느 달에서 넘어왔는지")과는 다른 칸이다.
     if(("carryPairId" in e) && (typeof e.carryPairId !== "string" || !e.carryPairId)){
       delete e.carryPairId; report.fixed++;
+    }
+
+    // 보류 표식은 true 하나만 뜻이 있다. 그 밖(false·""·0·글자)은 "보류 아님"이라 칸을
+    // 없앤다 — 두 가지 값이 같은 뜻을 갖게 되면 판정이 갈린다. 없던 칸은 만들지 않는다.
+    if("held" in e){
+      if(e.held === true){ /* 그대로 둔다 */ }
+      else { delete e.held; report.fixed++; }
     }
 
     // 고정내역의 month는 1~12 정수만 뜻이 있다. 그 밖(0·""·글자)은 "안 정함"이므로 칸을
@@ -2357,6 +2383,9 @@
       totalEl.textContent = won(total);
       totalEl.classList.toggle("neg", total < 0);
     }
+    // 합계와 보류 안내는 같은 계산에서 나오므로 늘 같이 갈아끼운다.
+    var heldEl = card.querySelector(".mp-held-note");
+    if(heldEl) heldEl.textContent = accountHeldText(acc);
   }
   // 치는 도중 갱신. state는 건드리지 않고, 입력칸 값만 갈아끼운 **가상의 대출**을 만들어
   // 공용 그리기 함수에 넘긴다. 저장은 change/focusout에서 한다.
@@ -2578,13 +2607,45 @@
     }
   }
 
+  // 보류 -------------------------------------------------------------------
+  //
+  // 개인 탭 내역을 "아직 반영하지 않음"으로 세워 두는 표식이다. 카드를 긁었지만 아직 돈이
+  // 빠지지 않은 것처럼, 적어는 뒀지만 총 보유자산에 넣기는 이른 내역을 위한 것이다.
+  //
+  // **금액을 바꾸지 않는다.** 줄도 그대로 남고 고칠 수도 있다. 총 보유자산을 셀 때만
+  // 건너뛴다. 보류를 풀면 그 자리에서 다시 더해진다.
+  //
+  // true일 때만 표식이 있다. false·""·0은 표식 없음과 같은 뜻이라 칸을 아예 없앤다 —
+  // 남겨두면 "보류가 아님"을 뜻하는 값이 두 가지가 되어 나중에 판정이 갈린다.
+  function txHeld(t){ return !!(t && t.held === true); }
+
   function accountTotal(acc){
     // 총 보유자산은 기준 잔액에 모든 지출/입금 내역이 더해지고 빠진 값이다.
+    // 보류해 둔 내역은 빼고 센다.
     var log = getLog(acc.id);
     var delta = log.reduce(function(s,t){
+      if(txHeld(t)) return s;
       return s + (t.type === "income" ? Number(t.amount||0) : -Number(t.amount||0));
     }, 0);
     return Number(acc.balance||0) + delta;
+  }
+  // 보류해 둔 내역이 총 보유자산을 얼마나 움직이고 있는지. 보류를 풀면 이만큼 바뀐다.
+  function accountHeldInfo(acc){
+    var count = 0, delta = 0;
+    getLog(acc.id).forEach(function(t){
+      if(!txHeld(t)) return;
+      count++;
+      delta += (t.type === "income" ? Number(t.amount||0) : -Number(t.amount||0));
+    });
+    return { count: count, delta: delta };
+  }
+  // 총 보유자산 아래 한 줄. 보류가 없으면 빈 문자열이라 자리를 차지하지 않는다.
+  // 내역을 접어 두면 보류해 둔 줄이 안 보이므로, 합계가 왜 이런지 여기서 알 수 있어야 한다.
+  function accountHeldText(acc){
+    var info = accountHeldInfo(acc);
+    if(!info.count) return "";
+    var sign = info.delta > 0 ? "+" : "";
+    return "보류 " + info.count + "건 · 풀면 " + sign + won(info.delta);
   }
 
   function isAmortizedLoan(loan){
@@ -3064,6 +3125,7 @@
             '<div class="mp-balance-field">' +
               '<div class="mp-balance-label">총 보유자산</div>' +
               '<div class="mp-account-total' + (total0<0?' neg':'') + '">' + won(total0) + '</div>' +
+              '<div class="mp-held-note">' + esc(accountHeldText(expandedAcc)) + '</div>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -3116,10 +3178,11 @@
         (log.length ?
         '<div class="mp-log">' +
           sorted.map(function(t){
-            return '<div class="mp-tx-row mp-tx-row-editable" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">' +
+            return '<div class="mp-tx-row mp-tx-row-editable' + (txHeld(t) ? ' is-held' : '') + '" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">' +
               '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-tx-date" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
               '<input type="text" class="mp-tx-memo-edit" data-action="edit-tx-memo" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="메모">' +
               '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit ' + t.type + '" data-action="edit-tx-amount" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
+              '<button type="button" class="mp-icon-btn mp-hold-btn' + (txHeld(t) ? ' is-on' : '') + '" data-action="toggle-tx-hold" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="' + (txHeld(t) ? '보류 풀기 — 총 보유자산에 다시 반영' : '보류 — 총 보유자산에서 빼기') + '">⏸</button>' +
               '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✕</button>' +
             '</div>';
           }).join("") +
@@ -3143,6 +3206,7 @@
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">총 보유자산</div>' +
                 '<div class="mp-account-total' + (accTotal<0?' neg':'') + '">' + won(accTotal) + '</div>' +
+                '<div class="mp-held-note">' + esc(accountHeldText(acc)) + '</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -4108,6 +4172,21 @@
       uiFlags.expandedAccounts[toggleId] = willExpand;
       if(!willExpand){ uiFlags.editingSettings[toggleId] = false; uiFlags.editingFixed = null; uiFlags.showFixed[toggleId] = false; uiFlags.showFixedAddForm[toggleId] = false; }
       saveState(); render(); return;
+    }
+    if(action === "toggle-tx-hold"){
+      var holdTx = getLog(el.dataset.account).find(function(t){ return t.id === el.dataset.id; });
+      if(holdTx){
+        // true일 때만 칸을 둔다. 풀 때는 칸을 아예 없앤다.
+        if(txHeld(holdTx)) delete holdTx.held;
+        else holdTx.held = true;
+        saveState();
+        var holdRow = el.closest(".mp-tx-row");
+        if(holdRow) holdRow.classList.toggle("is-held", txHeld(holdTx));
+        el.classList.toggle("is-on", txHeld(holdTx));
+        el.title = txHeld(holdTx) ? "보류 풀기 — 총 보유자산에 다시 반영" : "보류 — 총 보유자산에서 빼기";
+        updatePersonalBalanceDisplay(el.dataset.account);
+      }
+      return;
     }
     if(action === "delete-tx"){
       var log = getLog(el.dataset.account);

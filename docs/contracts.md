@@ -85,6 +85,9 @@
 생긴 줄은 `carryPairId`(짝 표식)와 — 다음 달 줄만 — `carryFrom`(출처 달)을 갖는다. 저축은
 `category`(`가족행사`|`일반`)를 갖는다.
 
+**기록줄**(개인 탭 `logs[계좌id]`): `id`, `date`, `memo`, `amount`, `type`, `ts`. 보류해 둔
+줄은 `held: true`를 갖는다 — **`true` 외의 값은 읽어들일 때 칸째로 없앤다**(보류 아님).
+
 **고정내역줄**: `id`, `category`, `name`, `amount`, `note`.
 
 읽어들일 때 모든 줄에 `date`와 `type`을 채워 넣는다. 정렬과 날짜 표시가 이 두 칸을 그대로
