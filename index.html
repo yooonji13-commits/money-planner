@@ -43,11 +43,11 @@
   @keyframes mp-reveal{ from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:translateY(0); } }
   @keyframes mp-tab-fade-in{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
 
-  .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-fixed-toggle-btn, .mp-month-btn,
+  .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-month-btn,
   .mp-reset-btn, .mp-account:not(.is-expanded), .mp-color-swatch, .mp-log-toggle, .mp-calc-key{
     transition: transform .12s ease, background-color .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease, box-shadow .15s ease;
   }
-  .mp-btn:active, .mp-icon-btn:active, .mp-sort-btn:active, .mp-fixed-toggle-btn:active,
+  .mp-btn:active, .mp-icon-btn:active, .mp-sort-btn:active,
   .mp-month-btn:active, .mp-reset-btn:active, .mp-account:not(.is-expanded):active, .mp-log-toggle:active, .mp-calc-key:active{
     transform: scale(.96);
   }
@@ -55,7 +55,7 @@
   .mp-tab.active::before{ transition: opacity .15s ease, transform .15s ease; }
 
   .mp-account.is-expanded{ animation: mp-card-expand .22s ease; }
-  .mp-account-settings-panel, .mp-month-picker, .mp-reveal-panel{ animation: mp-reveal .18s ease; }
+  .mp-account-settings-panel, .mp-month-picker{ animation: mp-reveal .18s ease; }
   .mp-main.mp-tab-fade{ animation: mp-tab-fade-in .2s ease; }
 
   .mp-total, .mp-account-total{ transition: color .2s ease; }
@@ -399,26 +399,6 @@
   .mp-account-number-row{ display:flex; align-items:center; gap:6px; }
   .mp-detail-field{ display:flex; flex-direction:column; gap:2px; }
   .mp-fixed-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .mp-fixed-list{ display:flex; flex-direction:column; gap:0; margin-top:2px; }
-  .mp-fixed-row{
-    display:grid; grid-template-columns:36px 1fr auto auto auto; gap:8px; align-items:center;
-    padding:7px 0; border-top:1px solid var(--line); font-size:.82rem;
-  }
-  .mp-fixed-day{ font-size:.78rem; color:var(--muted); font-weight:650; white-space:nowrap; }
-  .mp-fixed-add{ display:grid; grid-template-columns:56px 1fr 100px auto; gap:6px; margin-top:8px; }
-  .mp-fixed-add input, .mp-fixed-edit input{ width:100%; }
-  .mp-fixed-edit{ display:grid; grid-template-columns:56px 1fr 100px auto auto; gap:6px; align-items:center; padding:7px 0; border-top:1px solid var(--line); }
-  /* 개인 탭 고정지출: 일/내용/금액을 아이콘 없이 바로 탭해서 수정하는 행 */
-  .mp-fixed-row-editable{ grid-template-columns:30px 1fr 78px 22px; }
-  .mp-fixed-row-editable input{
-    border:none; background:none; padding:2px 0; font-size:.8rem; font-family:var(--font-ui);
-    color:var(--ink); height:auto; border-radius:4px; width:100%;
-  }
-  .mp-fixed-row-editable input:focus{ background:var(--surface-alt); padding:2px 4px; outline:none; }
-  .mp-fixed-day-edit{ color:var(--muted); font-weight:650; text-align:center; }
-  .mp-fixed-name-edit{ overflow:hidden; text-overflow:ellipsis; }
-  .mp-fixed-amt-edit{ font-variant-numeric:tabular-nums; font-weight:650; text-align:right; }
-  .mp-fixed-row-editable .mp-icon-btn{ padding:2px; justify-self:end; }
   .mp-loan-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
   .mp-loan-stats{ font-size:.78rem; color:var(--muted); margin-top:10px; }
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
@@ -450,6 +430,31 @@
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
   .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
+  /* 그래프 점을 눌렀을 때 아래에 펼쳐지는 구성 내역 */
+  .mp-util-pt-dot{ cursor:pointer; }
+  .mp-util-breakdown{
+    margin-top:10px; padding-top:10px; border-top:1px solid var(--line);
+    animation: mp-reveal .18s ease;
+  }
+  .mp-util-bd-head{ display:flex; align-items:baseline; gap:7px; margin-bottom:7px; font-size:.82rem; }
+  .mp-util-bd-date{ font-size:.7rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .mp-util-bd-row{
+    display:grid; grid-template-columns:48px 1fr 32px 82px; gap:7px; align-items:center;
+    padding:5px 0; font-size:.78rem;
+  }
+  .mp-util-bd-name{ color:var(--muted); white-space:nowrap; }
+  .mp-util-bd-bar{ height:5px; border-radius:3px; background:var(--surface-alt); overflow:hidden; }
+  .mp-util-bd-bar > i{ display:block; height:100%; border-radius:3px; background:var(--accent); }
+  .mp-util-bd-pct{ font-size:.68rem; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums; }
+  .mp-util-bd-amt{
+    text-align:right; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;
+  }
+  /* 합계 줄은 막대와 비율 칸을 비우고 이름과 금액만 양 끝에 둔다. */
+  .mp-util-bd-total{
+    grid-template-columns:1fr auto; border-top:1px solid var(--line); margin-top:3px; padding-top:7px;
+  }
+  .mp-util-bd-total .mp-util-bd-name{ color:var(--ink); font-weight:700; }
+  .mp-util-bd-empty{ font-size:.76rem; color:var(--muted); padding:4px 0; }
   .mp-util-chart{ display:block; height:130px; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
@@ -579,12 +584,6 @@
   .mp-account:not(.is-expanded) .mp-balance-field{ align-items:flex-start; }
   .mp-account:not(.is-expanded) .mp-account-total{ font-size:.9rem; text-align:left; }
   .mp-account:not(.is-expanded) .mp-loan-mini .mp-account-total{ text-align:center; }
-  .mp-tools-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; flex-wrap:wrap; }
-  .mp-fixed-toggle-btn{
-    font-family:var(--font-ui); background:var(--surface-alt); color:var(--muted); border:1px solid var(--line);
-    border-radius:999px; padding:4px 11px; font-size:.72rem; font-weight:650; cursor:pointer;
-  }
-  .mp-fixed-toggle-btn.active{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent-soft); }
   .mp-account-settings-panel{ display:flex; flex-direction:column; gap:10px; }
   .mp-account-detail{
     display:flex; flex-direction:column; gap:10px;
@@ -891,7 +890,6 @@
   var DELETE_CONFIRM_TEXT = {
     "delete-account": "이 계좌를 삭제할까요? 기록도 함께 삭제돼요.",
     "delete-loan": "이 대출을 삭제할까요?",
-    "delete-fixed-expense": "이 고정지출을 삭제할까요?",
     "delete-lf-item": "이 고정내역을 삭제할까요?",
     "delete-tx": "이 내역을 삭제할까요?",
     "delete-living-tx": "이 내역을 삭제할까요?",
@@ -931,9 +929,6 @@
     delete s.livingFixedItems;
     FIXED_ITEM_TABS.forEach(function(k){
       if(!Array.isArray(s.fixedItemsByTab[k])) s.fixedItemsByTab[k] = [];
-    });
-    (s.accounts || []).forEach(function(a){
-      if(!Array.isArray(a.fixedExpenses)) a.fixedExpenses = [];
     });
     (s.loans || []).forEach(function(l){
       if(typeof l.originalAmount !== "number") l.originalAmount = 0;
@@ -1056,7 +1051,7 @@
 
   function normType(v){ return (v === "income" || v === "expense") ? v : "expense"; }
 
-  // 내역 한 줄(개인 탭 기록, 생활비 내역, 저축 사용 내역, 고정내역, 고정지출).
+  // 내역 한 줄(개인 탭 기록, 생활비 내역, 저축 사용 내역, 고정내역).
   // seen은 한 목록 안에서 이미 쓴 id 모음이다. 같은 id가 두 번 나오면 뒤에 나온 줄에 새 id를
   // 준다 — 삭제는 같은 id를 가진 줄을 전부 지우고 편집은 첫 줄만 잡기 때문에, 중복인 채로 두면
   // 한 줄을 지울 때 다른 줄이 함께 사라진다. id를 다시 발급하는 건 기록을 지우는 게 아니다.
@@ -1069,7 +1064,7 @@
     else if(seen[e.id]){ e.id = uid(); report.fixed++; }
     seen[e.id] = true;
 
-    // 없던 칸을 채우는 것은 "보정"이 아니다. 내역 종류마다 쓰는 칸이 다르다(고정지출은
+    // 없던 칸을 채우는 것은 "보정"이 아니다. 내역 종류마다 쓰는 칸이 다르다(고정내역은
     // date·type이 없고, 저축 사용 내역은 type이 없다). 채운 것까지 세면 멀쩡한 백업을
     // 가져와도 "몇백 군데 보정했어요"가 떠서, 사용자가 자기 파일이 깨진 줄로 안다.
     // 그러므로 값이 실제로 있었고 그 값이 틀렸을 때만 센다.
@@ -1212,7 +1207,11 @@
     });
 
     s.accounts.forEach(function(a){
-      a.fixedExpenses = normalizeEntryList(a.fixedExpenses, report);
+      // 계좌별 고정지출은 없앤 기능이다(상단 고정내역과 하는 일이 같았다). 사용자가 기록까지
+      // 지우기로 정했으므로, 예전 파일이나 다른 기기에서 들어와도 여기서 떼어낸다.
+      // report.fixed에는 세지 않는다 — 그 숫자는 "파일이 깨져서 고쳤다"는 뜻이고,
+      // 없앤 기능의 칸을 치우는 것은 고침이 아니다.
+      if("fixedExpenses" in a) delete a.fixedExpenses;
       // 계좌 id가 없으면 편집·삭제가 아예 안 잡히므로 새로 발급한다. 다만 계좌 id가 겹칠 때는
       // 다시 발급하지 않는다 — logs는 계좌 id를 열쇠로 쓰기 때문에, id를 바꾸면 그 계좌의
       // 기록 전체가 떨어져 나간다. 그건 "기록을 버리지 않는다"와 정면으로 어긋난다.
@@ -2582,7 +2581,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, showFixed:{}, showFixedAddForm:{}, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", utilityBreakdownMk:"", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
@@ -3077,37 +3076,6 @@
   }
 
   // ---------- 개인 탭 ----------
-  function renderFixedExpensesHTML(acc){
-    var list = acc.fixedExpenses || [];
-    var showAdd = !!uiFlags.showFixedAddForm[acc.id];
-    return '<div class="mp-detail-field mp-reveal-panel">' +
-      '<div class="mp-fixed-head">' +
-        '<div class="mp-label">고정 지출</div>' +
-        '<button type="button" class="mp-icon-btn" data-action="toggle-fixed-add-form" data-account="' + acc.id + '" title="고정 지출 추가">✎</button>' +
-      '</div>' +
-      (list.length ?
-        '<div class="mp-fixed-list">' +
-          list.map(function(fx){
-            return '<div class="mp-fixed-row mp-fixed-row-editable" data-account="' + acc.id + '" data-id="' + fx.id + '">' +
-              '<input type="text" inputmode="numeric" class="mp-fixed-day-edit" data-action="edit-fixed-day" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + (fx.day||"") + '" placeholder="일">' +
-              '<input type="text" class="mp-fixed-name-edit" data-action="edit-fixed-name" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + esc(fx.name) + '" placeholder="내용">' +
-              '<input type="text" inputmode="numeric" class="mp-money mp-fixed-amt-edit" data-action="edit-fixed-amount" data-account="' + acc.id + '" data-id="' + fx.id + '" value="' + formatNumberString(fx.amount) + '">' +
-              '<button class="mp-icon-btn" data-action="delete-fixed-expense" data-account="' + acc.id + '" data-id="' + fx.id + '">✕</button>' +
-            '</div>';
-          }).join("") +
-        '</div>'
-      : '') +
-      (showAdd ?
-        '<form class="mp-fixed-add" data-action="add-fixed-expense" data-account="' + acc.id + '">' +
-          '<input type="number" inputmode="numeric" name="day" placeholder="일 (예: 1)" min="1" max="31" required>' +
-          '<input type="text" name="name" placeholder="내용 (예: 넷플릭스)" required>' +
-          '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
-          '<button type="submit" class="mp-btn small">추가</button>' +
-        '</form>'
-      : '') +
-    '</div>';
-  }
-
   function renderPersonalLockScreen(){
     return '<section class="mp-card mp-lock-screen">' +
       '<div class="mp-lock-icon">🔒</div>' +
@@ -3163,14 +3131,9 @@
       var sortDesc0 = uiFlags.logSortOrder !== "asc";
       var color0 = expandedAcc.color || "#3182F6";
       var editingSettings0 = !!uiFlags.editingSettings[expandedAcc.id];
-      var showFixed0 = !!uiFlags.showFixed[expandedAcc.id];
       var total0 = accountTotal(expandedAcc);
 
       html +=
-        '<div class="mp-tools-row">' +
-          '<button class="mp-fixed-toggle-btn' + (showFixed0 ? ' active' : '') + '" data-action="toggle-fixed-list" data-id="' + expandedAcc.id + '">' + (showFixed0 ? '고정지출 접기 ▴' : '고정지출 ▾') + '</button>' +
-        '</div>' +
-        (showFixed0 ? renderFixedExpensesHTML(expandedAcc) : '') +
         '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
@@ -3581,9 +3544,10 @@
 
     var marks = points.map(function(p){
       var isCurrent = p.mk === currentKey;
+      var isPicked = p.mk === uiFlags.utilityBreakdownMk;
       var mlabel = (p.mk.slice(0,4) !== currentKey.slice(0,4) ? p.mk.slice(2,4) + '.' : '') + parseInt(p.mk.slice(5,7), 10) + '월';
       return '<text class="mp-util-pt-val" data-mk="' + p.mk + '" x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="7.5" fill="var(--muted)" text-anchor="middle" opacity="' + (p.v > 0 ? 1 : 0) + '">' + won(p.v).replace("원","") + '</text>' +
-        '<circle class="mp-util-pt-dot" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isCurrent ? 4 : 3) + '" fill="' + (isCurrent ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
+        '<circle class="mp-util-pt-dot' + (isPicked ? ' is-picked' : '') + '" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isPicked ? 5.5 : (isCurrent ? 4 : 3)) + '" fill="' + (isCurrent || isPicked ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
         '<text x="' + p.x.toFixed(1) + '" y="' + (h - 6) + '" font-size="8.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
     }).join("");
 
@@ -3683,9 +3647,52 @@
           }).join("") +
         '</div>' +
         '<div class="mp-util-chart-wrap" id="mp-util-chart-wrap">' + utilityChartHTML(mk, chartField) + '</div>' +
+        '<div id="mp-util-breakdown">' + utilityBreakdownHTML() + '</div>' +
       '</section>';
   }
 
+  // 그래프의 점을 누르면 그 달의 관리비가 어떻게 이루어져 있는지 아래에 펼친다.
+  // 고른 달이 없으면 빈 문자열이라 자리를 차지하지 않는다.
+  //
+  // 지금 보고 있는 달로 옮기지는 않는다 — 위쪽 '작성 내역'은 그대로 두고 지난 달 구성만
+  // 들여다보는 것이 이 기능의 목적이다. 달을 옮기고 싶으면 위의 ‹ › 를 쓴다.
+  function utilityBreakdownHTML(){
+    var mk = uiFlags.utilityBreakdownMk;
+    if(!mk) return "";
+    // 그래프 범위에는 있지만 아직 아무것도 안 적은 달도 점이 찍힌다. 그 점을 눌러도
+    // 아무 일이 없으면 고장 난 것처럼 보이므로, 빈 달 모양을 만들어 "없다"고 알려준다.
+    var u = (state.utilities && state.utilities[mk]) || defaultUtilityMonth();
+    var total = utilityTotal(u);
+    // '전체'는 합계라서 구성 항목이 아니다. 나머지 다섯 칸만 줄로 만든다.
+    var rows = Object.keys(UTILITY_CHART_FIELDS).filter(function(f){ return f !== "total"; });
+    return '<div class="mp-util-breakdown">' +
+      '<div class="mp-util-bd-head">' +
+        '<b>' + monthLabel(mk) + '</b>' +
+        (u.payDate ? '<span class="mp-util-bd-date">' + esc(fmtDateDotsRead(u.payDate)) + ' 납부</span>' : '') +
+      '</div>' +
+      (total > 0 ?
+        rows.map(function(f){
+          var v = Number(u[f] || 0);
+          // 그 달에 안 적은 항목은 줄을 만들지 않는다. 0원이 다섯 줄 늘어서면
+          // 실제로 낸 항목이 묻힌다.
+          if(v <= 0) return "";
+          var pct = Math.round(v / total * 100);
+          return '<div class="mp-util-bd-row">' +
+              '<span class="mp-util-bd-name">' + UTILITY_CHART_FIELDS[f] + '</span>' +
+              '<span class="mp-util-bd-bar"><i style="width:' + pct + '%"></i></span>' +
+              '<span class="mp-util-bd-pct">' + pct + '%</span>' +
+              '<span class="mp-util-bd-amt">' + won(v) + '</span>' +
+            '</div>';
+        }).join("") +
+        '<div class="mp-util-bd-row mp-util-bd-total">' +
+          '<span class="mp-util-bd-name">합계</span>' +
+          '<span class="mp-util-bd-amt">' + won(total) + '</span>' +
+        '</div>'
+      : '<div class="mp-util-bd-empty">이 달은 적어둔 관리비가 없어요.</div>') +
+    '</div>';
+  }
+
+  // ---------- 대출 탭 ----------
   // ---------- 대출 탭 ----------
   function renderLoan(){
     var total = state.loans.reduce(function(s,l){ return s + loanRemaining(l); }, 0);
@@ -4121,17 +4128,6 @@
       render();
       return;
     }
-    if(action === "toggle-fixed-list"){
-      uiFlags.showFixed[el.dataset.id] = !uiFlags.showFixed[el.dataset.id];
-      if(!uiFlags.showFixed[el.dataset.id]){ uiFlags.showFixedAddForm[el.dataset.id] = false; }
-      render();
-      return;
-    }
-    if(action === "toggle-fixed-add-form"){
-      uiFlags.showFixedAddForm[el.dataset.account] = !uiFlags.showFixedAddForm[el.dataset.account];
-      render();
-      return;
-    }
     if(action === "copy-account-number"){
       var accCopy = state.accounts.find(function(a){ return a.id === el.dataset.id; });
       if(!accCopy || !accCopy.accountNumber) return;
@@ -4190,12 +4186,6 @@
       saveState(); render(); return;
     }
 
-    if(action === "delete-fixed-expense"){
-      var fxAcc = state.accounts.find(function(a){ return a.id === el.dataset.account; });
-      if(fxAcc) fxAcc.fixedExpenses = (fxAcc.fixedExpenses||[]).filter(function(f){ return f.id !== el.dataset.id; });
-      saveState(); render(); return;
-    }
-
     if(action === "show-add-loan"){ uiFlags.showAddLoan = true; render(); return; }
     if(action === "cancel-add-loan"){ uiFlags.showAddLoan = false; render(); return; }
     if(action === "delete-loan"){
@@ -4240,7 +4230,7 @@
       var willExpand = !uiFlags.expandedAccounts[toggleId];
       if(willExpand) uiFlags.expandedAccounts = {};
       uiFlags.expandedAccounts[toggleId] = willExpand;
-      if(!willExpand){ uiFlags.editingSettings[toggleId] = false; uiFlags.editingFixed = null; uiFlags.showFixed[toggleId] = false; uiFlags.showFixedAddForm[toggleId] = false; }
+      if(!willExpand){ uiFlags.editingSettings[toggleId] = false; }
       saveState(); render(); return;
     }
     if(action === "toggle-tx-hold"){
@@ -4290,8 +4280,28 @@
     if(action === "month-prev"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
     if(action === "month-next"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
+    if(action === "toggle-utility-breakdown"){
+      var bdMk = el.dataset.mk;
+      uiFlags.utilityBreakdownMk = (uiFlags.utilityBreakdownMk === bdMk) ? "" : bdMk;
+      var bdBox = document.getElementById("mp-util-breakdown");
+      if(bdBox) bdBox.innerHTML = utilityBreakdownHTML();
+      var svgEl = document.querySelector("#mp-main .mp-util-chart");
+      if(svgEl){
+        [].forEach.call(svgEl.querySelectorAll(".mp-util-pt-dot"), function(d){
+          var on = d.dataset.mk === uiFlags.utilityBreakdownMk;
+          d.classList.toggle("is-picked", on);
+          // r과 fill은 속성으로 적혀 있어서 클래스만으로는 안 바뀐다. 같이 갈아끼운다.
+          d.setAttribute("r", on ? 5.5 : (d.dataset.current ? 4 : 3));
+          d.setAttribute("fill", (on || d.dataset.current) ? "var(--accent)" : "var(--surface)");
+        });
+      }
+      return;
+    }
     if(action === "set-utility-chart-field"){
       uiFlags.utilityChartField = el.dataset.field;
+      // 항목을 바꾸면 점이 다른 자리로 옮겨간다. 펼쳐둔 구성 내역은 닫아서 어느 점을
+      // 눌렀던 것인지 헷갈리지 않게 한다.
+      uiFlags.utilityBreakdownMk = "";
       render();
       return;
     }
@@ -4598,38 +4608,6 @@
       }
       return;
     }
-    if(action === "edit-fixed-day"){
-      var fxAccD = state.accounts.find(function(a){ return a.id === el.dataset.account; });
-      var fxD = fxAccD && (fxAccD.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
-      if(fxD){
-        var digits = el.value.replace(/[^0-9]/g, "");
-        fxD.day = digits ? Math.min(31, Math.max(1, parseInt(digits, 10))) : 0;
-        el.value = fxD.day || "";
-        saveState();
-      }
-      return;
-    }
-    if(action === "edit-fixed-name"){
-      var fxAccN = state.accounts.find(function(a){ return a.id === el.dataset.account; });
-      var fxN = fxAccN && (fxAccN.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
-      if(fxN){
-        var newFxName = el.value.trim();
-        if(newFxName) fxN.name = newFxName;
-        else el.value = fxN.name;
-        saveState();
-      }
-      return;
-    }
-    if(action === "edit-fixed-amount"){
-      var fxAccA = state.accounts.find(function(a){ return a.id === el.dataset.account; });
-      var fxA = fxAccA && (fxAccA.fixedExpenses||[]).find(function(f){ return f.id === el.dataset.id; });
-      if(fxA){
-        var newFxAmt = Math.abs(parseMoneyValue(el.value));
-        if(newFxAmt > 0){ fxA.amount = newFxAmt; saveState(); }
-        else el.value = formatNumberString(fxA.amount);
-      }
-      return;
-    }
     if(action === "edit-living-tx-date"){
       var lmD = getLivingMonth(state.currentMonth);
       var ltD = lmD.tx.find(function(t){ return t.id === el.dataset.id; });
@@ -4922,22 +4900,8 @@
       var purpose = (fd.get("purpose")||"").trim();
       var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
       var color = palette[state.accounts.length % palette.length];
-      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color, purpose: purpose, fixedExpenses: [] });
+      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color, purpose: purpose });
       uiFlags.showAddAccount = false;
-      saveState(); render(); return;
-    }
-
-    if(action === "add-fixed-expense"){
-      var fxAccId = form.dataset.account;
-      var fxAcc2 = state.accounts.find(function(a){ return a.id === fxAccId; });
-      if(!fxAcc2) return;
-      var fxDay = Math.min(31, Math.max(1, parseInt(fd.get("day"), 10) || 0));
-      var fxName = (fd.get("name")||"").trim();
-      var fxAmount = Math.abs(parseMoneyValue(fd.get("amount")));
-      if(!fxDay || !fxName || fxAmount <= 0) return;
-      if(!Array.isArray(fxAcc2.fixedExpenses)) fxAcc2.fixedExpenses = [];
-      fxAcc2.fixedExpenses.push({ id: uid(), day: fxDay, name: fxName, amount: fxAmount });
-      uiFlags.showFixedAddForm[fxAccId] = false;
       saveState(); render(); return;
     }
 
