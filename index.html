@@ -456,8 +456,10 @@
   .mp-util-bd-total .mp-util-bd-name{ color:var(--ink); font-weight:700; }
   .mp-util-bd-empty{ font-size:.76rem; color:var(--muted); padding:4px 0; }
   .mp-util-chart{ display:block; height:134px; }
-  /* 점이 작아 손가락으로 누르기 어려워서, 보이지 않는 넓은 원을 점 뒤에 깔아 누를 곳을 넓혔다 */
+  /* 점만 누르게 하면 맞추기 어려워서, 달마다 보이지 않는 띠를 뒤에 깔아 그래프 아무 곳이나 눌리게 했다 */
   .mp-util-pt-hit{ cursor:pointer; pointer-events:all; }
+  /* 숫자·달 이름·선은 띠보다 위에 그려져서 그냥 두면 탭을 가로챈다. 통과시켜 뒤의 띠가 받게 한다 */
+  .mp-util-chart text, .mp-util-path{ pointer-events:none; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -3541,6 +3543,16 @@
   function utilityDotRadius(isPicked, isCurrent){
     return isPicked ? 8 : (isCurrent ? 6.5 : 5);
   }
+  // 달마다 누를 수 있는 띠. 옆 달과의 중간선까지가 그 달의 영역이고, 양쪽 끝은 가장자리까지다.
+  // 점만 누르게 하면 선 위아래 빈 곳이 죽은 공간이 되어 손가락으로 맞추기 어렵다.
+  function utilityChartBandsHTML(points, w, h){
+    return points.map(function(p, i){
+      var left = (i === 0) ? 0 : (points[i-1].x + p.x) / 2;
+      var right = (i === points.length - 1) ? w : (p.x + points[i+1].x) / 2;
+      return '<rect class="mp-util-pt-hit" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '"' +
+        ' x="' + left.toFixed(1) + '" y="0" width="' + (right - left).toFixed(1) + '" height="' + h + '" fill="transparent"/>';
+    }).join("");
+  }
   function utilityChartHTML(currentKey, field){
     var data = utilityChartData(currentKey, field);
     var points = data.points, w = data.w, h = data.h;
@@ -3554,12 +3566,12 @@
       var isPicked = p.mk === uiFlags.utilityBreakdownMk;
       var mlabel = (p.mk.slice(0,4) !== currentKey.slice(0,4) ? p.mk.slice(2,4) + '.' : '') + parseInt(p.mk.slice(5,7), 10) + '월';
       return '<text class="mp-util-pt-val" data-mk="' + p.mk + '" x="' + p.x.toFixed(1) + '" y="' + (p.y - 11).toFixed(1) + '" font-size="10" fill="var(--muted)" text-anchor="middle" opacity="' + (p.v > 0 ? 1 : 0) + '">' + won(p.v).replace("원","") + '</text>' +
-        '<circle class="mp-util-pt-hit" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="16" fill="transparent"/>' +
         '<circle class="mp-util-pt-dot' + (isPicked ? ' is-picked' : '') + '" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + utilityDotRadius(isPicked, isCurrent) + '" fill="' + (isCurrent || isPicked ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="2"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
         '<text x="' + p.x.toFixed(1) + '" y="' + (h - 7) + '" font-size="10.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
     }).join("");
 
     return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" class="mp-util-chart" xmlns="http://www.w3.org/2000/svg">' +
+      utilityChartBandsHTML(points, w, h) +
       '<path class="mp-util-path" d="' + pathD + '" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
       marks +
     '</svg>';
@@ -3580,8 +3592,6 @@
     points.forEach(function(p){
       var dot = svg.querySelector('.mp-util-pt-dot[data-mk="' + p.mk + '"]');
       if(dot) dot.setAttribute("cy", p.y.toFixed(1));
-      var hit = svg.querySelector('.mp-util-pt-hit[data-mk="' + p.mk + '"]');
-      if(hit) hit.setAttribute("cy", p.y.toFixed(1));
       var val = svg.querySelector('.mp-util-pt-val[data-mk="' + p.mk + '"]');
       if(val){
         val.setAttribute("y", (p.y - 11).toFixed(1));
