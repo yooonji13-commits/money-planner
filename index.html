@@ -455,7 +455,9 @@
   }
   .mp-util-bd-total .mp-util-bd-name{ color:var(--ink); font-weight:700; }
   .mp-util-bd-empty{ font-size:.76rem; color:var(--muted); padding:4px 0; }
-  .mp-util-chart{ display:block; height:130px; }
+  .mp-util-chart{ display:block; height:134px; }
+  /* 점이 작아 손가락으로 누르기 어려워서, 보이지 않는 넓은 원을 점 뒤에 깔아 누를 곳을 넓혔다 */
+  .mp-util-pt-hit{ cursor:pointer; pointer-events:all; }
   .mp-account-balance{ font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
   .mp-account-balance.neg{ color:var(--negative); }
   .mp-account-body{
@@ -3521,7 +3523,8 @@
       return field === "total" ? utilityTotal(m) : Number(m[field]||0);
     });
     var max = Math.max.apply(null, totals.concat([1]));
-    var stepPx = 54, h = 120, padTop = 20, padBottom = 22, padX = 26;
+    // 점과 숫자를 키운 만큼 위아래 여백과 점 사이 간격도 같이 넓힌다. 좁으면 옆 달 숫자와 붙는다.
+    var stepPx = 62, h = 134, padTop = 24, padBottom = 28, padX = 30;
     var innerH = h - padTop - padBottom;
     var w = Math.max(300, padX * 2 + (months.length - 1) * stepPx);
     var stepX = months.length > 1 ? (w - padX * 2) / (months.length - 1) : 0;
@@ -3533,6 +3536,10 @@
     });
 
     return { points: points, w: w, h: h };
+  }
+  // 점 크기는 그리기와 상세 토글 두 곳에서 쓴다. 숫자가 흩어지면 한쪽만 바뀌므로 여기서만 정한다.
+  function utilityDotRadius(isPicked, isCurrent){
+    return isPicked ? 8 : (isCurrent ? 6.5 : 5);
   }
   function utilityChartHTML(currentKey, field){
     var data = utilityChartData(currentKey, field);
@@ -3546,9 +3553,10 @@
       var isCurrent = p.mk === currentKey;
       var isPicked = p.mk === uiFlags.utilityBreakdownMk;
       var mlabel = (p.mk.slice(0,4) !== currentKey.slice(0,4) ? p.mk.slice(2,4) + '.' : '') + parseInt(p.mk.slice(5,7), 10) + '월';
-      return '<text class="mp-util-pt-val" data-mk="' + p.mk + '" x="' + p.x.toFixed(1) + '" y="' + (p.y - 8).toFixed(1) + '" font-size="7.5" fill="var(--muted)" text-anchor="middle" opacity="' + (p.v > 0 ? 1 : 0) + '">' + won(p.v).replace("원","") + '</text>' +
-        '<circle class="mp-util-pt-dot' + (isPicked ? ' is-picked' : '') + '" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + (isPicked ? 5.5 : (isCurrent ? 4 : 3)) + '" fill="' + (isCurrent || isPicked ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="1.6"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
-        '<text x="' + p.x.toFixed(1) + '" y="' + (h - 6) + '" font-size="8.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
+      return '<text class="mp-util-pt-val" data-mk="' + p.mk + '" x="' + p.x.toFixed(1) + '" y="' + (p.y - 11).toFixed(1) + '" font-size="10" fill="var(--muted)" text-anchor="middle" opacity="' + (p.v > 0 ? 1 : 0) + '">' + won(p.v).replace("원","") + '</text>' +
+        '<circle class="mp-util-pt-hit" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="16" fill="transparent"/>' +
+        '<circle class="mp-util-pt-dot' + (isPicked ? ' is-picked' : '') + '" data-action="toggle-utility-breakdown" data-mk="' + p.mk + '" cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + utilityDotRadius(isPicked, isCurrent) + '" fill="' + (isCurrent || isPicked ? 'var(--accent)' : 'var(--surface)') + '" stroke="var(--accent)" stroke-width="2"' + (isCurrent ? ' data-current="1"' : '') + '/>' +
+        '<text x="' + p.x.toFixed(1) + '" y="' + (h - 7) + '" font-size="10.5" fill="' + (isCurrent ? 'var(--accent)' : 'var(--muted)') + '" font-weight="' + (isCurrent ? '700' : '400') + '" text-anchor="middle">' + mlabel + '</text>';
     }).join("");
 
     return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" class="mp-util-chart" xmlns="http://www.w3.org/2000/svg">' +
@@ -3572,9 +3580,11 @@
     points.forEach(function(p){
       var dot = svg.querySelector('.mp-util-pt-dot[data-mk="' + p.mk + '"]');
       if(dot) dot.setAttribute("cy", p.y.toFixed(1));
+      var hit = svg.querySelector('.mp-util-pt-hit[data-mk="' + p.mk + '"]');
+      if(hit) hit.setAttribute("cy", p.y.toFixed(1));
       var val = svg.querySelector('.mp-util-pt-val[data-mk="' + p.mk + '"]');
       if(val){
-        val.setAttribute("y", (p.y - 8).toFixed(1));
+        val.setAttribute("y", (p.y - 11).toFixed(1));
         val.setAttribute("opacity", p.v > 0 ? 1 : 0);
         val.textContent = won(p.v).replace("원","");
       }
@@ -4291,7 +4301,7 @@
           var on = d.dataset.mk === uiFlags.utilityBreakdownMk;
           d.classList.toggle("is-picked", on);
           // r과 fill은 속성으로 적혀 있어서 클래스만으로는 안 바뀐다. 같이 갈아끼운다.
-          d.setAttribute("r", on ? 5.5 : (d.dataset.current ? 4 : 3));
+          d.setAttribute("r", utilityDotRadius(on, d.dataset.current));
           d.setAttribute("fill", (on || d.dataset.current) ? "var(--accent)" : "var(--surface)");
         });
       }
