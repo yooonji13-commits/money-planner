@@ -640,6 +640,8 @@
   .mp-log-toggle{ font-size:.78rem; color:var(--accent); background:none; border:none; cursor:pointer; text-align:left; padding:0; font-weight:600; }
   .mp-log{ display:flex; flex-direction:column; margin-top:2px; }
   .mp-sort-toggle{ display:flex; gap:6px; }
+  /* 생활비는 폼과 목록이 한 카드에 붙어 있어 위아래 여백을 따로 준다 */
+  .mp-sort-toggle-living{ margin:10px 0 2px; }
   .mp-sort-btn{
     font-family:var(--font-ui); background:var(--surface-alt); color:var(--muted); border:1px solid var(--line);
     border-radius:999px; padding:4px 11px; font-size:.72rem; font-weight:650; cursor:pointer;
@@ -2585,7 +2587,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", showAddLoan:false, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", utilityBreakdownMk:"", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", livingSortOrder:"desc", showAddLoan:false, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", utilityBreakdownMk:"", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
@@ -3434,7 +3436,8 @@
     var remain = Number(m.budget||0) - spent + received;
     var bar = livingBarState(m.budget, spent, received);
     var pct = bar.pct, barClass = bar.cls;
-    var txSorted = m.tx.slice().sort(txListComparator(true));
+    var livingSortDesc = uiFlags.livingSortOrder !== "asc";
+    var txSorted = m.tx.slice().sort(txListComparator(livingSortDesc));
 
     return '<div class="mp-tab-sticky">' +
       '<div class="mp-month-switch">' +
@@ -3469,16 +3472,21 @@
             '<option value="income">입금</option>' +
           '</select>' +
           '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
-          '<input type="text" name="memo" placeholder="내용">' +
+          '<input type="text" name="memo" placeholder="메모">' +
           '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
           '<button class="mp-btn small" type="submit">추가</button>' +
         '</form>' +
+        (txSorted.length ?
+        '<div class="mp-sort-toggle mp-sort-toggle-living">' +
+          '<button class="mp-sort-btn' + (livingSortDesc ? ' active' : '') + '" data-action="set-living-sort" data-order="desc">최신순</button>' +
+          '<button class="mp-sort-btn' + (!livingSortDesc ? ' active' : '') + '" data-action="set-living-sort" data-order="asc">과거순</button>' +
+        '</div>' : '') +
         '<div class="mp-tx-list">' +
           (txSorted.length ? txSorted.map(function(t){
             var ty = t.type || "expense";
             return '<div class="mp-tx-row mp-tx-row-editable" data-id="' + t.id + '">' +
               '<input type="text" inputmode="numeric" class="mp-date-input mp-tx-date-edit" data-action="edit-living-tx-date" data-id="' + t.id + '" value="' + fmtDateDots(t.date) + '" maxlength="10">' +
-              '<input type="text" class="mp-tx-memo-edit" data-action="edit-living-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="내용">' +
+              '<input type="text" class="mp-tx-memo-edit" data-action="edit-living-tx-memo" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="메모">' +
               '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit ' + ty + '" data-action="edit-living-tx-amount" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
               '<button class="mp-icon-btn" data-action="delete-living-tx" data-id="' + t.id + '">✕</button>' +
             '</div>';
@@ -4275,6 +4283,10 @@
     }
     if(action === "set-log-sort"){
       uiFlags.logSortOrder = el.dataset.order;
+      render(); return;
+    }
+    if(action === "set-living-sort"){
+      uiFlags.livingSortOrder = el.dataset.order;
       render(); return;
     }
 
