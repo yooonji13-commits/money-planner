@@ -640,8 +640,8 @@
   .mp-log-toggle{ font-size:.78rem; color:var(--accent); background:none; border:none; cursor:pointer; text-align:left; padding:0; font-weight:600; }
   .mp-log{ display:flex; flex-direction:column; margin-top:2px; }
   .mp-sort-toggle{ display:flex; gap:6px; }
-  /* 생활비는 폼과 목록이 한 카드에 붙어 있어 위아래 여백을 따로 준다 */
-  .mp-sort-toggle-living{ margin:10px 0 2px; }
+  /* 정렬 버튼이 입력 폼 바로 아래 붙지 않도록 띄운다 */
+  .mp-sort-toggle-living{ margin-top:10px; }
   .mp-sort-btn{
     font-family:var(--font-ui); background:var(--surface-alt); color:var(--muted); border:1px solid var(--line);
     border-radius:999px; padding:4px 11px; font-size:.72rem; font-weight:650; cursor:pointer;
@@ -3481,6 +3481,8 @@
           '<button class="mp-sort-btn' + (livingSortDesc ? ' active' : '') + '" data-action="set-living-sort" data-order="desc">최신순</button>' +
           '<button class="mp-sort-btn' + (!livingSortDesc ? ' active' : '') + '" data-action="set-living-sort" data-order="asc">과거순</button>' +
         '</div>' : '') +
+      '</section>' +
+      '<section class="mp-card mp-log-card">' +
         '<div class="mp-tx-list">' +
           (txSorted.length ? txSorted.map(function(t){
             var ty = t.type || "expense";
