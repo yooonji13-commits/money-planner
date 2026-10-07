@@ -430,8 +430,16 @@
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
   .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
+  /* 누른 달로 미는 건 인라인 scroll-behavior로 켠다. 동작 줄이기를 켠 사람에게는 그걸 눌러 끈다 */
+  @media (prefers-reduced-motion: reduce){
+    .mp-util-chart-wrap{ scroll-behavior:auto !important; }
+  }
   /* 그래프 점을 눌렀을 때 아래에 펼쳐지는 구성 내역 */
-  .mp-util-pt-dot{ cursor:pointer; }
+  /* r·fill을 속성으로 갈아끼우는데, CSS에서 그 둘을 전환하면 커지는 게 눈에 따라온다 */
+  .mp-util-pt-dot{ cursor:pointer; transition:r .18s ease, fill .18s ease; }
+  @media (prefers-reduced-motion: reduce){
+    .mp-util-pt-dot{ transition:none; }
+  }
   .mp-util-breakdown{
     margin-top:10px; padding-top:10px; border-top:1px solid var(--line);
     animation: mp-reveal .18s ease;
@@ -3610,13 +3618,23 @@
       }
     });
   }
-  function centerUtilityChart(){
+  // 그래프를 가로로 밀어 그 달의 점이 가운데 오게 한다.
+  // smooth면 스르륵 움직이고, 아니면 바로 옮긴다.
+  function scrollUtilityChartToMk(mk, smooth){
     var wrap = document.getElementById("mp-util-chart-wrap");
     if(!wrap) return;
-    var dot = wrap.querySelector('circle[data-current="1"]');
+    var dot = wrap.querySelector('circle[data-mk="' + mk + '"]');
     if(!dot) return;
     var cx = parseFloat(dot.getAttribute("cx")) || 0;
+    // scrollTo({behavior})는 안 먹어도 아무 일이 안 일어나서 달이 아예 안 옮겨진다.
+    // scroll-behavior를 켜두고 scrollLeft로 옮기면, 그걸 모르는 브라우저에서도
+    // 애니메이션만 빠지고 끝 자리는 똑같다.
+    wrap.style.scrollBehavior = smooth ? "smooth" : "auto";
     wrap.scrollLeft = Math.max(0, cx - wrap.clientWidth / 2);
+  }
+  function centerUtilityChart(){
+    var dot = document.querySelector('#mp-util-chart-wrap circle[data-current="1"]');
+    if(dot) scrollUtilityChartToMk(dot.dataset.mk, false);
   }
   function renderUtility(){
     var mk = state.currentMonth;
@@ -4329,6 +4347,9 @@
           d.setAttribute("fill", (on || d.dataset.current) ? "var(--accent)" : "var(--surface)");
         });
       }
+      // 누른 달을 화면 가운데로 끌어온다. 끝쪽 달은 가려져 있어서 눌러도 어디가
+      // 열렸는지 안 보인다. 닫을 때는 보던 자리를 흔들지 않도록 그냥 둔다.
+      if(uiFlags.utilityBreakdownMk) scrollUtilityChartToMk(uiFlags.utilityBreakdownMk, true);
       return;
     }
     if(action === "set-utility-chart-field"){
