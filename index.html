@@ -710,7 +710,8 @@
   .mp-tx-row .mp-tx-amt.income{ color:var(--positive); }
   /* 개인 탭: 날짜/내역/금액을 아이콘 없이 바로 탭해서 수정하는 행 (기준잔액과 같은 방식) */
   /* 날짜 · 메모 · 금액 · 보류 · 삭제 */
-  .mp-tx-row-editable{ grid-template-columns:74px 1fr 76px 26px 20px; gap:5px; }
+  /* 날짜 · 메모 · 금액 · 보류 · 반영 · 삭제 */
+  .mp-tx-row-editable{ grid-template-columns:68px 1fr 72px 22px 22px 18px; gap:4px; }
   .mp-tx-row-editable input{
     border:none; background:none; padding:2px 0; font-size:.8rem; font-family:var(--font-ui);
     color:var(--ink); height:auto; border-radius:4px;
@@ -727,7 +728,7 @@
   /* 손으로 누르는 단추라 칸보다 넉넉하게 잡는다. 줄의 위아래 여백(9px) 안쪽으로만
      늘려서 칸 배치는 그대로 두고 누를 수 있는 넓이만 키운다. */
   .mp-tx-row-editable .mp-hold-btn{
-    padding:7px 4px; margin:-5px 0; justify-self:center; opacity:.32; font-size:.8rem;
+    padding:7px 0; margin:-5px 0; width:100%; justify-self:center; opacity:.32; font-size:.8rem;
   }
   .mp-tx-row-editable .mp-hold-btn.is-on{ opacity:1; color:var(--accent); }
   .mp-tx-row.is-held .mp-tx-date-edit,
@@ -739,6 +740,36 @@
     font-variant-numeric:tabular-nums;
   }
   .mp-held-note:empty{ display:none; }
+  /* 반영 단추. 보류와 같은 크기로 두되 색은 초록이다 — 보류는 "아직", 반영은 "됐다"라
+     서로 반대라서 색이 같으면 어느 쪽을 눌렀는지 헷갈린다. */
+  .mp-tx-row-editable .mp-apply-btn{
+    padding:7px 0; margin:-5px 0; width:100%; justify-self:center; opacity:.45;
+    font-size:.86rem; color:var(--positive);
+  }
+  /* 휴지통 */
+  .mp-trash{ margin-top:6px; border-top:1px solid var(--line); padding-top:6px; }
+  .mp-trash-toggle{
+    font-family:var(--font-ui); background:none; border:none; color:var(--muted);
+    font-size:.72rem; font-weight:700; padding:4px 0; cursor:pointer;
+  }
+  .mp-trash-list{ animation: mp-reveal .18s ease; }
+  .mp-trash-row{
+    display:grid; grid-template-columns:62px 1fr 72px auto; gap:5px; align-items:center;
+    padding:6px 0; border-top:1px solid var(--line); font-size:.76rem;
+  }
+  .mp-trash-date{ color:var(--muted); font-size:.68rem; font-variant-numeric:tabular-nums; }
+  .mp-trash-memo{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+  .mp-trash-amt{
+    text-align:right; font-variant-numeric:tabular-nums; font-weight:650; color:var(--negative);
+  }
+  .mp-trash-amt.income{ color:var(--positive); }
+  /* 왜 사라졌는지. 반영은 기준 잔액이 움직였다는 뜻이라 눈에 띄게 둔다. */
+  .mp-trash-why{
+    grid-column:1 / 4; font-size:.66rem; color:var(--muted); margin-top:-3px;
+  }
+  .mp-trash-why.is-applied{ color:var(--positive); font-weight:700; }
+  .mp-trash-undo{ grid-row:1 / 3; grid-column:4; font-size:.68rem; padding:4px 8px; }
+  .mp-trash-note{ font-size:.66rem; color:var(--muted); margin-top:7px; line-height:1.5; }
   .mp-log-card{ padding:6px 16px; margin-top:4px; }
   .mp-log-card .mp-log{ margin-top:0; }
   .mp-log-card .mp-empty{ padding:16px 0; }
@@ -880,6 +911,12 @@
   // var state = loadState()에서 일어난다. 계산 함수들 옆(아래쪽)에 두면 var 대입이 아직
   // 실행되기 전이라 undefined가 되고, 저장된 repayType이 지워진 채 저장까지 된다.
   // 함수 선언과 달리 var 대입은 호이스팅되지 않는다.
+  // 휴지통에 들어간 까닭. normalizeState()가 이 값으로 줄을 가려내고 그 호출은
+  // var state = loadState()에서 일어나므로, 선언은 반드시 그보다 위에 있어야 한다.
+  // 아래쪽(휴지통 함수들 옆)에 두면 var 대입이 아직 안 돼서 undefined가 되고,
+  // 반영해 둔 줄이 전부 "지움"으로 바뀌어 되돌려도 기준 잔액이 안 돌아온다.
+  var TRASH_APPLIED = "applied";
+  var TRASH_DELETED = "deleted";
   var LOAN_REPAY_AMORTIZED = "amortized";
   // 회차 상한. 원금·금리·만기일에 이상한 값이 들어와도 계산이 오래 돌지 않게 막는다.
   // 1200회 = 100년이라, 실제 대출은 여기에 걸리지 않는다.
@@ -905,7 +942,7 @@
     "delete-account": "이 계좌를 삭제할까요? 기록도 함께 삭제돼요.",
     "delete-loan": "이 대출을 삭제할까요?",
     "delete-lf-item": "이 고정내역을 삭제할까요?",
-    "delete-tx": "이 내역을 삭제할까요?",
+    "delete-tx": "이 내역을 휴지통으로 보낼까요? (휴지통에서 되돌릴 수 있어요)",
     "delete-living-tx": "이 내역을 삭제할까요?",
     "delete-savings-tx": "이 내역을 삭제할까요?"
   };
@@ -923,6 +960,7 @@
       currentMonth: currentMonthKey,
       accounts: [],
       logs: {},
+      trashByAccount: {},
       savings: {},
       savingsExpenses: [],
       living: {},
@@ -1194,6 +1232,7 @@
     if(!Array.isArray(s.accounts)) s.accounts = [];
     if(!Array.isArray(s.loans)) s.loans = [];
     if(!isPlainObject(s.logs)) s.logs = {};
+    if(!isPlainObject(s.trashByAccount)) s.trashByAccount = {};
     if(!isPlainObject(s.living)) s.living = {};
     if(!isPlainObject(s.savings)) s.savings = {};
     if(!isPlainObject(s.utilities)) s.utilities = {};
@@ -1218,6 +1257,26 @@
     // 개인 탭 기록. 지금 없는 계좌의 키가 남아 있어도 지우지 않는다(계좌가 돌아오면 기록도 돌아온다).
     Object.keys(s.logs).forEach(function(accId){
       s.logs[accId] = normalizeEntryList(s.logs[accId], report);
+    });
+
+    // 휴지통도 같은 모양의 줄이다. 기록과 같은 정규화를 지나야 깨진 줄이 섞여도 화면이
+    // 안 깨진다. 여기 있는 줄도 돈 기록이므로 버리지 않는다.
+    Object.keys(s.trashByAccount).forEach(function(accId){
+      s.trashByAccount[accId] = normalizeEntryList(s.trashByAccount[accId], report);
+      s.trashByAccount[accId].forEach(function(t){
+        // 왜 사라졌는지는 아는 두 값뿐이다. 그 밖이면 "지움"으로 본다 — 모르는 값을
+        // "반영"으로 보면 되돌릴 때 기준 잔액을 엉뚱하게 건드린다.
+        if(t.trashedBy !== TRASH_APPLIED && t.trashedBy !== TRASH_DELETED){
+          t.trashedBy = TRASH_DELETED;
+        }
+        // 되돌릴 때 기준 잔액에서 뺄 값. 유한한 숫자가 아니면 0으로 둔다(잔액을 안 건드림).
+        if(t.trashedBy === TRASH_APPLIED){
+          if(typeof t.appliedDelta !== "number" || !isFinite(t.appliedDelta)) t.appliedDelta = 0;
+        } else if("appliedDelta" in t){
+          delete t.appliedDelta;
+        }
+        if(typeof t.trashedAt !== "number" || !isFinite(t.trashedAt)) t.trashedAt = 0;
+      });
     });
 
     s.accounts.forEach(function(a){
@@ -2595,7 +2654,7 @@
   var main = document.getElementById("mp-main");
   var headerDate = document.getElementById("mp-headerdate");
 
-  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", livingSortOrder:"desc", showAddLoan:false, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", utilityBreakdownMk:"", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
+  var uiFlags = { expandedAccounts:{}, showAddAccount:false, editingSettings:{}, showMonthPicker:false, logSortOrder:"desc", trashOpen:{}, livingSortOrder:"desc", showAddLoan:false, expandedLoans:{}, editingLoanSettings:{}, savingsExpanded:false, showSync:false, syncJoinError:"", showPasswordSetup:false, passwordModalMode:null, passwordError:"", utilityChartField:"total", utilityBreakdownMk:"", showUtilityForm:false, showCalculator:false, showFixedItems:false, fixedGroupOpen:{}, lastFixedCategory:"", lastFixedMonth:0, savingsUsedOpen:false, lastSavingsTxCategory:"" };
   var personalUnlocked = false;
 
   // 개인 탭에서 비밀번호를 아직 안 푼 상태(잠금 화면)인지.
@@ -2700,6 +2759,62 @@
       '</svg>';
   }
 
+  // 휴지통 -------------------------------------------------------------------
+  //
+  // 개인 탭 기록이 목록에서 사라지는 길은 두 가지고, 둘 다 휴지통을 거친다.
+  //
+  // - **반영**: 금액을 기준 잔액에 접어 넣고 줄을 치운다. 보류가 아닌 줄을 반영하면
+  //   총 보유자산은 그대로다(빼던 것을 기준 잔액에서 빼게 될 뿐이다). 보류해 둔 줄을
+  //   반영하면 그만큼 총 보유자산이 움직인다 — "안 세던 것을 이제 센다"는 뜻이라 맞다.
+  // - **삭제**: 기준 잔액은 건드리지 않고 줄만 치운다. 그 금액만큼 총 보유자산이 바뀐다.
+  //
+  // 되돌릴 때 기준 잔액을 정확히 거꾸로 돌리려고, 반영할 때 더한 값을 appliedDelta에
+  // 적어 둔다. 종류·금액으로 다시 계산하지 않는다 — 휴지통에 있는 동안 규칙이 바뀌어도
+  // 그때 실제로 더한 값으로 되돌아가야 한다.
+  function getTrash(accountId){
+    if(!state.trashByAccount || typeof state.trashByAccount !== "object") state.trashByAccount = {};
+    if(!Array.isArray(state.trashByAccount[accountId])) state.trashByAccount[accountId] = [];
+    return state.trashByAccount[accountId];
+  }
+  // 반영하면 기준 잔액이 이만큼 움직인다. 입금은 더하고 지출은 뺀다.
+  function txApplyDelta(t){
+    var amt = Math.abs(Number(t && t.amount || 0));
+    return (t && t.type === "income") ? amt : -amt;
+  }
+  // 목록에서 줄을 떼어 휴지통으로 옮긴다. 금액·날짜·메모는 그대로 두고 표식만 더한다.
+  function moveTxToTrash(accountId, txId, why, delta){
+    var log = getLog(accountId);
+    var found = null;
+    state.logs[accountId] = log.filter(function(t){
+      if(t.id !== txId) return true;
+      found = t; return false;
+    });
+    if(!found) return null;
+    found.trashedBy = why;
+    found.trashedAt = Date.now();
+    if(why === TRASH_APPLIED) found.appliedDelta = delta;
+    getTrash(accountId).unshift(found);
+    return found;
+  }
+  // 휴지통에서 꺼내 목록으로 되돌린다. 반영이었으면 기준 잔액도 거꾸로 돌린다.
+  function restoreTxFromTrash(accountId, txId){
+    var bin = getTrash(accountId);
+    var found = null;
+    state.trashByAccount[accountId] = bin.filter(function(t){
+      if(t.id !== txId) return true;
+      found = t; return false;
+    });
+    if(!found) return null;
+    var acc = state.accounts.find(function(a){ return a.id === accountId; });
+    if(acc && found.trashedBy === TRASH_APPLIED){
+      acc.balance = Number(acc.balance||0) - Number(found.appliedDelta||0);
+    }
+    delete found.trashedBy;
+    delete found.trashedAt;
+    delete found.appliedDelta;
+    getLog(accountId).push(found);
+    return found;
+  }
   function accountTotal(acc){
     // 총 보유자산은 기준 잔액에 모든 지출/입금 내역이 더해지고 빠진 값이다.
     // 보류해 둔 내역은 빼고 센다.
@@ -3090,6 +3205,35 @@
   }
 
   // ---------- 개인 탭 ----------
+  // 기록 목록 아래에 접어 두는 휴지통. 비어 있으면 아예 그리지 않는다.
+  function accountTrashHTML(acc){
+    var bin = getTrash(acc.id);
+    if(!bin.length) return "";
+    var open = !!uiFlags.trashOpen[acc.id];
+    return '<div class="mp-trash">' +
+      '<button type="button" class="mp-trash-toggle" data-action="toggle-trash" data-id="' + acc.id + '">' +
+        '휴지통 ' + bin.length + '건 ' + (open ? '▴' : '▾') +
+      '</button>' +
+      (open ?
+        '<div class="mp-trash-list">' +
+          bin.map(function(t){
+            var applied = t.trashedBy === TRASH_APPLIED;
+            return '<div class="mp-trash-row">' +
+                '<span class="mp-trash-date">' + esc(fmtDateDots(t.date)) + '</span>' +
+                '<span class="mp-trash-memo">' + esc(t.memo || "") + '</span>' +
+                '<span class="mp-trash-amt ' + (t.type === "income" ? "income" : "") + '">' +
+                  formatNumberString(t.amount) + '</span>' +
+                '<span class="mp-trash-why' + (applied ? ' is-applied' : '') + '">' +
+                  (applied ? '반영됨' : '지움') + '</span>' +
+                '<button type="button" class="mp-btn ghost small mp-trash-undo" data-action="restore-tx" ' +
+                  'data-account="' + acc.id + '" data-id="' + t.id + '">되돌리기</button>' +
+              '</div>';
+          }).join("") +
+          '<div class="mp-trash-note">되돌리면 기록이 목록으로 돌아오고, 반영했던 금액은 기준 잔액에서 다시 빠집니다.</div>' +
+        '</div>'
+      : '') +
+    '</div>';
+  }
   function renderPersonalLockScreen(){
     return '<section class="mp-card mp-lock-screen">' +
       '<div class="mp-lock-icon">🔒</div>' +
@@ -3228,11 +3372,13 @@
               '<input type="text" class="mp-tx-memo-edit" data-action="edit-tx-memo" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + esc(t.memo||"") + '" placeholder="메모">' +
               '<input type="text" inputmode="numeric" class="mp-money mp-tx-amount-edit ' + t.type + '" data-action="edit-tx-amount" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" value="' + formatNumberString(t.amount) + '">' +
               '<button type="button" class="mp-icon-btn mp-hold-btn' + (txHeld(t) ? ' is-on' : '') + '" data-action="toggle-tx-hold" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="' + (txHeld(t) ? '보류 풀기 — 총 보유자산에 다시 반영' : '보류 — 총 보유자산에서 빼기') + '">⏸</button>' +
+              '<button type="button" class="mp-icon-btn mp-apply-btn" data-action="apply-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '" title="반영 — 기준 잔액에 넣고 줄은 휴지통으로">✓</button>' +
               '<button class="mp-icon-btn" data-action="delete-tx" data-account="' + expandedAcc.id + '" data-id="' + t.id + '">✕</button>' +
             '</div>';
           }).join("") +
         '</div>'
         : '<div class="mp-empty">아직 기록이 없어요</div>') +
+        accountTrashHTML(expandedAcc) +
       '</div>';
     } else {
       html += '<div class="mp-accounts-grid">';
@@ -4297,9 +4443,29 @@
       return;
     }
     if(action === "delete-tx"){
-      var log = getLog(el.dataset.account);
-      state.logs[el.dataset.account] = log.filter(function(t){ return t.id !== el.dataset.id; });
+      // 영영 지우지 않고 휴지통으로 보낸다. 기준 잔액은 건드리지 않는다.
+      moveTxToTrash(el.dataset.account, el.dataset.id, TRASH_DELETED, 0);
       saveState(); render(); return;
+    }
+    if(action === "apply-tx"){
+      var applyLog = getLog(el.dataset.account);
+      var applyTx = applyLog.find(function(t){ return t.id === el.dataset.id; });
+      var applyAcc = state.accounts.find(function(a){ return a.id === el.dataset.account; });
+      if(applyTx && applyAcc){
+        var delta = txApplyDelta(applyTx);
+        applyAcc.balance = Number(applyAcc.balance||0) + delta;
+        moveTxToTrash(el.dataset.account, el.dataset.id, TRASH_APPLIED, delta);
+        saveState(); render();
+      }
+      return;
+    }
+    if(action === "restore-tx"){
+      restoreTxFromTrash(el.dataset.account, el.dataset.id);
+      saveState(); render(); return;
+    }
+    if(action === "toggle-trash"){
+      uiFlags.trashOpen[el.dataset.id] = !uiFlags.trashOpen[el.dataset.id];
+      render(); return;
     }
     if(action === "set-log-sort"){
       uiFlags.logSortOrder = el.dataset.order;

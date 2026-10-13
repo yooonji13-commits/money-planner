@@ -45,6 +45,9 @@
   "currentMonth":  "YYYY-MM",
   "monthByTab":    { "living": "YYYY-MM", "utility": "YYYY-MM", "family": "YYYY-MM" },
 
+  "trashByAccount": { "계좌id": [ 기록줄 + { "trashedBy": "applied"|"deleted",
+                                           "trashedAt": 숫자, "appliedDelta": 숫자 } ] },
+
   "accounts": [ {
       "id": "문자열(고유)", "name": "문자열", "purpose": "문자열",
       "accountNumber": "문자열", "color": "#RRGGBB",
