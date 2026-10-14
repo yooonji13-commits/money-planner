@@ -44,7 +44,7 @@
   @keyframes mp-tab-fade-in{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
 
   .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-month-btn,
-  .mp-reset-btn, .mp-account:not(.is-expanded), .mp-color-swatch, .mp-log-toggle, .mp-calc-key{
+  .mp-reset-btn, .mp-account:not(.is-expanded), .mp-log-toggle, .mp-calc-key{
     transition: transform .12s ease, background-color .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease, box-shadow .15s ease;
   }
   .mp-btn:active, .mp-icon-btn:active, .mp-sort-btn:active,
@@ -338,7 +338,7 @@
   .mp-savings-grid .mp-account.is-now .mp-sv-mon{ color:var(--accent); }
   .mp-account{
     background:var(--surface); border:1px solid var(--line);
-    border-left-width:4px; border-left-style:solid; border-left-color:var(--acc-color, var(--accent));
+    border-left-width:4px; border-left-style:solid; border-left-color:var(--accent);
     border-radius:var(--radius-lg);
     padding:14px 16px; display:flex; flex-direction:column; gap:8px;
   }
@@ -354,11 +354,11 @@
   /* 개인 탭: 계좌 색을 칠한 동그란 아이콘. 색이 밝든 어둡든 흰 아이콘이 얹히므로
      어떤 색을 골라도 보인다(옅은 배경 위에 옅은 아이콘이 되는 일이 없다). */
   .mp-acc-badge{
-    width:36px; height:36px; border-radius:50%; flex-shrink:0; margin-bottom:9px;
-    background:var(--acc-color, var(--accent)); color:var(--accent-ink);
+    width:48px; height:48px; border-radius:50%; flex-shrink:0; margin-bottom:10px;
+    background:var(--accent); color:var(--accent-ink);
     display:flex; align-items:center; justify-content:center;
   }
-  .mp-acc-badge svg{ width:22px; height:22px; display:block; }
+  .mp-acc-badge svg{ width:30px; height:30px; display:block; }
   /* 대출 탭: 얼마나 갚았는지 도넛으로. 숫자를 읽지 않아도 먼저 보인다. */
   .mp-loan-mini{ align-items:center; text-align:center; }
   .mp-loan-ring{ width:44px; height:44px; display:block; margin:0 auto 8px; }
@@ -372,12 +372,6 @@
   .mp-loan-ring.is-done .mp-loan-ring-fg{ stroke:var(--positive); }
   .mp-loan-ring.is-done .mp-loan-ring-pct{ fill:var(--positive); }
   .mp-loan-mini .mp-account-total{ font-size:.95rem; margin-top:3px; }
-  .mp-color-swatch{
-    -webkit-appearance:none; appearance:none; width:22px; height:22px; flex-shrink:0;
-    border:1px solid var(--line); border-radius:6px; padding:0; background:none; cursor:pointer;
-  }
-  .mp-color-swatch::-webkit-color-swatch-wrapper{ padding:2px; }
-  .mp-color-swatch::-webkit-color-swatch{ border:none; border-radius:4px; }
   .mp-account-name-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* 접힌 카드의 이름은 두 줄까지 보여주고 그 뒤로 말줄임한다.
@@ -601,7 +595,6 @@
     display:flex; flex-direction:column; gap:10px;
     margin-top:2px; padding-top:10px; border-top:1px solid var(--line);
   }
-  .mp-account-settings-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .mp-icon-btn{
     background:none; border:none; color:var(--muted); font-size:.78rem; padding:4px 6px;
     border-radius:var(--radius-sm); cursor:pointer;
@@ -2776,6 +2769,15 @@
   //
   // 색은 stroke/fill 모두 currentColor다. 뱃지가 계좌 색으로 칠해지고 글자색이 흰색이라,
   // 어떤 계좌 색을 골라도 유령은 흰색으로 또렷하게 보인다.
+  // 유령 색. 계좌가 놓인 차례대로 돌아가며 정해지므로 **옆 카드와 늘 다른 색**이다.
+  // 사용자가 고르지 않는다(색 고르는 칸을 없앴다). 계좌를 지우면 그 아래 계좌들의 색이
+  // 한 칸씩 당겨지는데, 색은 기록이 아니라 구분용이라 그대로 둔다.
+  var GHOST_COLORS = ["#3182F6", "#17BF83", "#FFA929", "#F0424E", "#8B5CF6", "#0EA5B7"];
+  function accountGhostColor(index){
+    var i = Math.floor(Number(index) || 0);
+    if(!isFinite(i) || i < 0) i = 0;
+    return GHOST_COLORS[i % GHOST_COLORS.length];
+  }
   function accountGhostSVG(happy){
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
         'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -3339,12 +3341,11 @@
     if(expandedAcc){
       var log0 = getLog(expandedAcc.id);
       var sortDesc0 = uiFlags.logSortOrder !== "asc";
-      var color0 = expandedAcc.color || "#3182F6";
       var editingSettings0 = !!uiFlags.editingSettings[expandedAcc.id];
       var total0 = accountTotal(expandedAcc);
 
       html +=
-        '<div class="mp-account is-expanded" style="--acc-color:' + color0 + ';">' +
+        '<div class="mp-account is-expanded">' +
         '<div class="mp-account-body">' +
           '<div class="mp-account-name-row">' +
             '<div class="mp-account-name">' + esc(expandedAcc.name) + '</div>' +
@@ -3384,9 +3385,6 @@
                   '<input type="text" class="mp-account-number" data-action="set-account-number" data-id="' + expandedAcc.id + '" value="' + esc(expandedAcc.accountNumber||"") + '" placeholder="계좌번호 입력">' +
                   (expandedAcc.accountNumber ? '<button class="mp-icon-btn" data-action="copy-account-number" data-id="' + expandedAcc.id + '" title="계좌번호 복사">⧉</button>' : '') +
                 '</div>' +
-              '</div>' +
-              '<div class="mp-account-settings-row">' +
-                '<input type="color" class="mp-color-swatch" data-action="set-color" data-id="' + expandedAcc.id + '" value="' + color0 + '" title="카드 색상">' +
               '</div>' +
             '</div>'
           ) : "") +
@@ -3434,12 +3432,12 @@
       '</div>';
     } else {
       html += '<div class="mp-accounts-grid">';
-      state.accounts.forEach(function(acc){
-        var color = acc.color || "#3182F6";
+      state.accounts.forEach(function(acc, accIndex){
         var accTotal = accountTotal(acc);
-        html += '<div class="mp-account" data-action="toggle-log" data-id="' + acc.id + '" style="--acc-color:' + color + ';">' +
+        html += '<div class="mp-account" data-action="toggle-log" data-id="' + acc.id + '">' +
           '<div class="mp-account-body">' +
-            '<span class="mp-acc-badge">' + accountGhostSVG(accTotal >= 0) + '</span>' +
+            '<span class="mp-acc-badge" style="background:' + accountGhostColor(accIndex) + ';">' +
+              accountGhostSVG(accTotal >= 0) + '</span>' +
             '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
             (acc.purpose ? '<div class="mp-account-purpose">' + esc(acc.purpose) + '</div>' : '') +
             '<div class="mp-balance-row">' +
@@ -3450,7 +3448,6 @@
               '<div class="mp-balance-field">' +
                 '<div class="mp-balance-label">총 보유자산</div>' +
                 '<div class="mp-account-total' + (accTotal<0?' neg':'') + '">' + won(accTotal) + '</div>' +
-                '<div class="mp-held-note">' + esc(accountHeldText(acc)) + '</div>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -4944,11 +4941,6 @@
       }
       return;
     }
-    if(action === "set-color"){
-      var accC = state.accounts.find(function(a){ return a.id === el.dataset.id; });
-      if(accC){ accC.color = el.value; saveState(); render(); }
-      return;
-    }
     if(action === "set-loan-rate"){
       var loanR = state.loans.find(function(l){ return l.id === el.dataset.id; });
       if(loanR){ loanR.rate = el.value.trim(); saveState(); }
@@ -5171,9 +5163,9 @@
       if(!name) return;
       var accountNumber = (fd.get("accountNumber")||"").trim();
       var purpose = (fd.get("purpose")||"").trim();
-      var palette = ["#3182F6","#17BF83","#8B5CF6","#FFA929","#F0424E","#00B8D9"];
-      var color = palette[state.accounts.length % palette.length];
-      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, color: color, purpose: purpose });
+      // 색은 저장하지 않는다. 유령 색은 계좌가 놓인 차례로 그때그때 정해진다
+      // (accountGhostColor). 아무도 읽지 않는 칸을 남기면 나중에 헷갈린다.
+      state.accounts.push({ id: uid(), name: name, balance: 0, accountNumber: accountNumber, purpose: purpose });
       uiFlags.showAddAccount = false;
       saveState(); render(); return;
     }
