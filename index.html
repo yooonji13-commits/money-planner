@@ -2840,8 +2840,9 @@
   function accountHeldText(acc){
     var info = accountHeldInfo(acc);
     if(!info.count) return "";
-    var sign = info.delta > 0 ? "+" : "";
-    return "보류 " + info.count + "건 · 풀면 " + sign + won(info.delta);
+    // 차액이 아니라 **보류까지 합친 총 보유자산**을 보여준다. 위에 적힌 총 보유자산과
+    // 같은 단위라 바로 견줄 수 있다 — "-50,000원"은 그 자체로는 얼마가 되는지 모른다.
+    return "보류 " + info.count + "건 · 풀면 " + won(accountTotal(acc) + info.delta);
   }
 
   function isAmortizedLoan(loan){
