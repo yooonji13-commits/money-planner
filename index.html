@@ -354,11 +354,11 @@
   /* 개인 탭: 계좌 색을 칠한 동그란 아이콘. 색이 밝든 어둡든 흰 아이콘이 얹히므로
      어떤 색을 골라도 보인다(옅은 배경 위에 옅은 아이콘이 되는 일이 없다). */
   .mp-acc-badge{
-    width:30px; height:30px; border-radius:50%; flex-shrink:0; margin-bottom:9px;
+    width:36px; height:36px; border-radius:50%; flex-shrink:0; margin-bottom:9px;
     background:var(--acc-color, var(--accent)); color:var(--accent-ink);
     display:flex; align-items:center; justify-content:center;
   }
-  .mp-acc-badge svg{ width:17px; height:17px; display:block; }
+  .mp-acc-badge svg{ width:22px; height:22px; display:block; }
   /* 대출 탭: 얼마나 갚았는지 도넛으로. 숫자를 읽지 않아도 먼저 보인다. */
   .mp-loan-mini{ align-items:center; text-align:center; }
   .mp-loan-ring{ width:44px; height:44px; display:block; margin:0 auto 8px; }
@@ -915,6 +915,9 @@
   // var state = loadState()에서 일어나므로, 선언은 반드시 그보다 위에 있어야 한다.
   // 아래쪽(휴지통 함수들 옆)에 두면 var 대입이 아직 안 돼서 undefined가 되고,
   // 반영해 둔 줄이 전부 "지움"으로 바뀌어 되돌려도 기준 잔액이 안 돌아온다.
+  // 휴지통에 머무는 기간. 이만큼 지난 줄은 앱을 열 때 영영 지운다.
+  // 사용자가 정한 값이다 — 돈 기록이 완전히 사라지는 유일한 길이므로 지운 건수를 알린다.
+  var TRASH_KEEP_DAYS = 30;
   var TRASH_APPLIED = "applied";
   var TRASH_DELETED = "deleted";
   var LOAN_REPAY_AMORTIZED = "amortized";
@@ -1275,7 +1278,11 @@
         } else if("appliedDelta" in t){
           delete t.appliedDelta;
         }
-        if(typeof t.trashedAt !== "number" || !isFinite(t.trashedAt)) t.trashedAt = 0;
+        // 언제 버렸는지 모르면 **지금**으로 둔다. 0으로 두면 1970년이 되어 30일이
+        // 한참 지난 것으로 읽히고, 앱을 여는 순간 영영 지워진다.
+        if(typeof t.trashedAt !== "number" || !isFinite(t.trashedAt) || t.trashedAt <= 0){
+          t.trashedAt = Date.now();
+        }
       });
     });
 
@@ -1307,9 +1314,34 @@
     normalizeMonthBuckets(s.utilities, { make: defaultUtilityMonth, nums: ["community","electricity","water","heating","other"], strs: ["payDate"], tx: false }, report);
 
     // 달 묶음 모양이 다 갖춰진 뒤에 돌려야 tx를 안전하게 훑을 수 있다.
+    purgeOldTrash(s, report);
     migrateLegacyCarryOvers(s, report);
 
     return s;
+  }
+
+  // 휴지통에서 TRASH_KEEP_DAYS를 넘긴 줄을 영영 지운다.
+  //
+  // 이 앱에서 돈 기록이 완전히 사라지는 **유일한** 길이라, 두 가지를 지킨다.
+  // - 언제 버렸는지 아는 줄만 센다. trashedAt은 바로 위에서 "모르면 지금"으로 맞춰 두므로
+  //   여기까지 오면 늘 유효한 값이다.
+  // - 몇 건을 지웠는지 report에 담아 사용자에게 알린다. 조용히 지우지 않는다.
+  function purgeOldTrash(s, report){
+    if(!isPlainObject(s.trashByAccount)) return;
+    var cutoff = Date.now() - TRASH_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    var removed = 0;
+    Object.keys(s.trashByAccount).forEach(function(accId){
+      var bin = s.trashByAccount[accId];
+      if(!Array.isArray(bin)) return;
+      s.trashByAccount[accId] = bin.filter(function(t){
+        var at = Number(t && t.trashedAt);
+        if(!isFinite(at) || at <= 0) return true;   // 모르는 시각은 건드리지 않는다
+        if(at >= cutoff) return true;
+        removed++;
+        return false;
+      });
+    });
+    if(removed) report.trashPurged = (report.trashPurged || 0) + removed;
   }
 
   // 예전 방식으로 이월된 기록을 지금 방식(두 줄 한 쌍)으로 맞춰준다.
@@ -1513,11 +1545,17 @@
     if(loadReport.legacyCarryFixed){
       pendingLegacyCarryNotice = loadReport.legacyCarryFixed;
     }
+    // 휴지통에서 영영 지운 줄이 있으면 반드시 알린다. 되돌릴 수 없는 일이다.
+    if(loadReport.trashPurged){
+      pendingTrashPurgeNotice = loadReport.trashPurged;
+    }
     return merged;
   }
 
   // 알림은 화면이 만들어진 뒤에 띄워야 해서 첫 그리기까지 들고 있는다.
   var pendingLegacyCarryNotice = 0;
+
+  var pendingTrashPurgeNotice = 0;
 
   var state = loadState();
   // 앱을 새로 열 때마다(완전히 종료 후 재실행 포함) 생활비/관리비/저축 탭이 오늘이 포함된
@@ -2729,15 +2767,27 @@
   // 남겨두면 "보류가 아님"을 뜻하는 값이 두 가지가 되어 나중에 판정이 갈린다.
   function txHeld(t){ return !!(t && t.held === true); }
 
-  // 개인 탭 계좌 아이콘(지갑). 탭바 아이콘과 같은 방식의 인라인 SVG다 — 이모지를 쓰면
-  // 기기마다 모양과 크기가 달라져서 뱃지 안에서 중심이 맞지 않는다.
-  var ACCOUNT_ICON_SVG =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
-      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a2 2 0 0 1 2 2v1"></path>' +
-      '<path d="M3 8.5V17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"></path>' +
-      '<path d="M21 11h-4a2 2 0 0 0 0 4h4z"></path>' +
-    '</svg>';
+  // 개인 탭 계좌 캐릭터(유령). 탭바 아이콘과 같은 방식의 인라인 SVG다 — 이모지를 쓰면
+  // 기기마다 모양과 크기가 달라져서 뱃지 안에서 중심이 맞지 않고, 얼굴도 제각각이 된다.
+  //
+  // **입만 바뀐다.** 총 보유자산이 0 이상이면 웃고, 마이너스면 시무룩하다. 숫자를 읽지
+  // 않아도 눈치챌 수 있게 하려는 것이지, 숫자를 대신하려는 게 아니다 — 금액은 바로
+  // 아래에 그대로 적혀 있다.
+  //
+  // 색은 stroke/fill 모두 currentColor다. 뱃지가 계좌 색으로 칠해지고 글자색이 흰색이라,
+  // 어떤 계좌 색을 골라도 유령은 흰색으로 또렷하게 보인다.
+  function accountGhostSVG(happy){
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        // 아래가 물결처럼 출렁이는 유령 몸통
+        '<path d="M5 20V10a7 7 0 0 1 14 0v10l-2.3-1.8-2.4 1.8-2.3-1.8-2.4 1.8z"></path>' +
+        '<circle cx="9.6" cy="10.3" r="1.05" fill="currentColor" stroke="none"></circle>' +
+        '<circle cx="14.4" cy="10.3" r="1.05" fill="currentColor" stroke="none"></circle>' +
+        (happy
+          ? '<path d="M10.2 13.6c.5.6 1.1.9 1.8.9s1.3-.3 1.8-.9"></path>'
+          : '<path d="M10.2 14.6c.5-.6 1.1-.9 1.8-.9s1.3.3 1.8.9"></path>') +
+      '</svg>';
+  }
 
   // 대출 카드의 상환 도넛. 게이지와 같은 계산(loanBarState)을 쓴다 — 두 곳이 다른 값을
   // 보여주면 안 된다.
@@ -2842,7 +2892,7 @@
     if(!info.count) return "";
     // 차액이 아니라 **보류까지 합친 총 보유자산**을 보여준다. 위에 적힌 총 보유자산과
     // 같은 단위라 바로 견줄 수 있다 — "-50,000원"은 그 자체로는 얼마가 되는지 모른다.
-    return "보류 " + info.count + "건 · 풀면 " + won(accountTotal(acc) + info.delta);
+    return "보류 " + info.count + "건 · 합치면 " + won(accountTotal(acc) + info.delta);
   }
 
   function isAmortizedLoan(loan){
@@ -3217,7 +3267,7 @@
       '</button>' +
       (open ?
         '<div class="mp-trash-list">' +
-          bin.map(function(t){
+          bin.slice().sort(txListComparator(true)).map(function(t){
             var applied = t.trashedBy === TRASH_APPLIED;
             return '<div class="mp-trash-row">' +
                 '<span class="mp-trash-date">' + esc(fmtDateDots(t.date)) + '</span>' +
@@ -3230,7 +3280,8 @@
                   'data-account="' + acc.id + '" data-id="' + t.id + '">되돌리기</button>' +
               '</div>';
           }).join("") +
-          '<div class="mp-trash-note">되돌리면 기록이 목록으로 돌아오고, 반영했던 금액은 기준 잔액에서 다시 빠집니다.</div>' +
+          '<div class="mp-trash-note">되돌리면 기록이 목록으로 돌아오고, 반영했던 금액은 기준 잔액에서 다시 빠집니다. ' +
+            '휴지통에 들어온 지 ' + TRASH_KEEP_DAYS + '일이 지나면 영영 지워집니다.</div>' +
         '</div>'
       : '') +
     '</div>';
@@ -3388,7 +3439,7 @@
         var accTotal = accountTotal(acc);
         html += '<div class="mp-account" data-action="toggle-log" data-id="' + acc.id + '" style="--acc-color:' + color + ';">' +
           '<div class="mp-account-body">' +
-            '<span class="mp-acc-badge">' + ACCOUNT_ICON_SVG + '</span>' +
+            '<span class="mp-acc-badge">' + accountGhostSVG(accTotal >= 0) + '</span>' +
             '<div class="mp-account-name">' + esc(acc.name) + '</div>' +
             (acc.purpose ? '<div class="mp-account-purpose">' + esc(acc.purpose) + '</div>' : '') +
             '<div class="mp-balance-row">' +
@@ -5299,6 +5350,10 @@
   }
 
   render();
+  if(pendingTrashPurgeNotice){
+    showNotice("휴지통에서 " + TRASH_KEEP_DAYS + "일 지난 " + pendingTrashPurgeNotice + "건을 영영 지웠어요.");
+    pendingTrashPurgeNotice = 0;
+  }
   if(pendingLegacyCarryNotice){
     showNotice("예전에 이월한 " + pendingLegacyCarryNotice + "건을 맞췄어요. 넘어간 달에 '…로 이월' 줄이 생기고 그 달 잔액이 0원이 돼요.");
     pendingLegacyCarryNotice = 0;
