@@ -372,6 +372,20 @@
   .mp-loan-ring.is-done .mp-loan-ring-fg{ stroke:var(--positive); }
   .mp-loan-ring.is-done .mp-loan-ring-pct{ fill:var(--positive); }
   .mp-loan-mini .mp-account-total{ font-size:.95rem; margin-top:3px; }
+  /* 잔여 금액 아래 한 줄. 얼마나 갚았는지는 카드를 펼치지 않아도 보여야 한다 */
+  .mp-loan-mini-repaid{ font-size:.68rem; color:var(--muted); margin-top:5px; }
+  .mp-loan-mini-repaid b{ color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; }
+  /* 종료한 대출 카드. 지운 게 아니라 접어 둔 것이라 자리와 숫자는 그대로 두고 색만 뺀다 */
+  .mp-account.is-loan-closed{
+    border-left-color:var(--line); filter:grayscale(1); opacity:.55;
+  }
+  .mp-loan-closed-mark{
+    font-size:.64rem; font-weight:700; color:var(--muted); letter-spacing:.04em;
+    border:1px solid var(--line); border-radius:999px; padding:1px 9px; margin:3px 0 1px;
+  }
+  /* 펼친 카드는 흐리게 하지 않는다 — 종료 취소 버튼을 눌러야 하는 자리다 */
+  .mp-loan-closed-at{ font-size:.72rem; color:var(--muted); margin-top:8px; }
+  .mp-loan-close-btn{ margin-top:10px; }
   .mp-account-name-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* 접힌 카드의 이름은 두 줄까지 보여주고 그 뒤로 말줄임한다.
@@ -2567,7 +2581,7 @@
     if(totalInst > 0) tail = " · 총 " + totalInst + "회 중 잔여 " + loanRemainingInstallments(loan) + "회";
     else if(isAmortizedLoan(loan)) tail = " · 만기일을 입력하면 잔여 회차가 표시돼요";
     else tail = " · 월 상환액을 입력하면 잔여 회차가 표시돼요";
-    return (isAmortizedLoan(loan) ? "갚은 원금 " : "변제 금액 ") +
+    return loanRepaidLabel(loan) + " " +
       "<b>" + won(loanRepaid(loan)) + "</b>" + tail;
   }
   // 카드 안 숫자들을 갈아끼우는 단 하나의 자리. 저장 뒤 갱신과 치는 도중 갱신이 같이 쓴다.
@@ -2603,6 +2617,7 @@
     var heroTotalEl = document.querySelector("#mp-main .mp-hero .mp-total");
     if(!heroTotalEl) return;
     var grandTotal = state.loans.reduce(function(s, l){
+      if(isLoanClosed(l)) return s;
       return s + loanRemaining(live && live.id === l.id ? live : l);
     }, 0);
     heroTotalEl.textContent = won(grandTotal);
@@ -2959,6 +2974,16 @@
   function loanRepaid(loan){
     if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).repaidPrincipal;
     return Number(loan.currentInstallment||0) * Number(loan.monthlyPayment||0);
+  }
+  // 갚은 금액을 뭐라고 부를지 한곳에서 정한다. 원리금균등은 낸 돈 중 원금만 세므로
+  // 이름도 그렇게 적는다 — 카드와 상세가 다른 이름으로 같은 숫자를 부르면 헷갈린다.
+  function loanRepaidLabel(loan){
+    return isAmortizedLoan(loan) ? "갚은 원금" : "갚은 금액";
+  }
+  // 종료한 대출. 지우는 게 아니라 "끝난 것으로 접어 두는" 상태다. 적어둔 숫자는 그대로
+  // 남고 총 대출 잔액에서만 빠진다. 종료한 날(closedAt)이 있으면 종료다.
+  function isLoanClosed(loan){
+    return !!(loan && loan.closedAt);
   }
   function loanRemaining(loan){
     if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).balance;
@@ -3938,7 +3963,10 @@
   // ---------- 대출 탭 ----------
   // ---------- 대출 탭 ----------
   function renderLoan(){
-    var total = state.loans.reduce(function(s,l){ return s + loanRemaining(l); }, 0);
+    // 종료한 대출은 끝난 빚이라 총액에서 뺀다. 대신 몇 건을 접어 뒀는지 바로 아래 적어서
+    // 합계가 조용히 줄어든 것처럼 보이지 않게 한다.
+    var closedCount = state.loans.filter(isLoanClosed).length;
+    var total = state.loans.reduce(function(s,l){ return isLoanClosed(l) ? s : s + loanRemaining(l); }, 0);
     var html = "";
     var expandedLoanId = state.loans.reduce(function(found, l){ return found || (uiFlags.expandedLoans[l.id] ? l.id : null); }, null);
     var expandedLoan = expandedLoanId ? state.loans.find(function(l){ return l.id === expandedLoanId; }) : null;
@@ -3947,7 +3975,7 @@
       '<section class="mp-card mp-hero">' +
         '<div class="mp-label">총 대출 잔액</div>' +
         '<div class="mp-total ' + (total>0?"neg":"pos") + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
-        '<div class="mp-sub">' + state.loans.length + '건</div>' +
+        '<div class="mp-sub">' + state.loans.length + '건' + (closedCount ? ' · 종료 ' + closedCount + '건' : '') + '</div>' +
       '</section>' +
       (expandedLoanId ?
         '<button class="mp-btn ghost block" data-action="toggle-loan" data-id="' + expandedLoanId + '">← 뒤로가기</button>' :
@@ -4007,6 +4035,11 @@
           '</div>' +
           '<div class="mp-loan-stats">' + loanStatsHTML(expandedLoan) + '</div>' +
           '<div class="mp-loan-end">' + esc(loanEndText(expandedLoan)) + '</div>' +
+          (isLoanClosed(expandedLoan) ?
+            '<div class="mp-loan-closed-at">' + fmtDateDotsRead(expandedLoan.closedAt) + ' 종료함</div>' : '') +
+          '<button type="button" class="mp-btn ghost block mp-loan-close-btn" data-action="toggle-loan-closed" data-id="' + expandedLoan.id + '">' +
+            (isLoanClosed(expandedLoan) ? '종료 취소' : '종료') +
+          '</button>' +
         '</div>' +
         '<div class="mp-account-detail">' +
           (editingSettings0 ? (
@@ -4044,14 +4077,20 @@
 
     if(!expandedLoan){
       html += '<div class="mp-accounts-grid">';
-      state.loans.forEach(function(loan){
+      // 종료한 것은 뒤로 보낸다. 갚는 중인 대출이 먼저 눈에 들어와야 한다.
+      // 각 무리 안에서는 적어둔 순서를 그대로 둔다(concat은 순서를 안 흔든다).
+      var openLoans = state.loans.filter(function(l){ return !isLoanClosed(l); });
+      openLoans.concat(state.loans.filter(isLoanClosed)).forEach(function(loan){
         var remaining = loanRemaining(loan);
-        html += '<div class="mp-account" data-action="toggle-loan" data-id="' + loan.id + '">' +
+        var closed = isLoanClosed(loan);
+        html += '<div class="mp-account' + (closed ? ' is-loan-closed' : '') + '" data-action="toggle-loan" data-id="' + loan.id + '">' +
           '<div class="mp-account-body mp-loan-mini">' +
             loanRingHTML(loan) +
             '<div class="mp-account-name">' + esc(loan.name) + '</div>' +
+            (closed ? '<div class="mp-loan-closed-mark">종료</div>' : '') +
             '<div class="mp-balance-label">잔여 금액</div>' +
             '<div class="mp-account-total' + (remaining<0?' neg':'') + '">' + won(remaining) + '</div>' +
+            '<div class="mp-loan-mini-repaid">' + loanRepaidLabel(loan) + ' <b>' + won(loanRepaid(loan)) + '</b></div>' +
           '</div>' +
         '</div>';
       });
@@ -4438,6 +4477,16 @@
       saveState(); render(); return;
     }
 
+    if(action === "toggle-loan-closed"){
+      var closeLoan = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(!closeLoan) return;
+      // 치던 값부터 저장한다. 종료를 누르느라 적던 회차가 날아가면 안 된다.
+      commitPendingLoanFields();
+      // 종료는 지우는 게 아니다. 금액·회차는 손대지 않고 종료한 날짜만 적고 뗀다.
+      if(isLoanClosed(closeLoan)) delete closeLoan.closedAt;
+      else closeLoan.closedAt = new Date().toISOString().slice(0,10);
+      saveState(); render(); return;
+    }
     if(action === "toggle-loan"){
       commitPendingTxEdits();
       var toggleLoanId = el.dataset.id;
