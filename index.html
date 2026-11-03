@@ -283,6 +283,8 @@
   }
   .mp-total.neg{ color:var(--negative); }
   .mp-total.pos{ color:var(--ink); }
+  /* 그래프에서 고른 달을 보여주는 중. 지금 적고 있는 달이 아니라는 걸 색으로도 알린다 */
+  .mp-hero .mp-total.is-picked-month{ color:var(--accent); }
 
   .mp-sub{ font-size:.85rem; color:var(--muted); margin-top:2px; }
 
@@ -2376,10 +2378,33 @@
       if(stillEl) stillEl.classList.remove("is-on");
     }, 1400);
   }
+  // 맨 위 숫자 칸이 어느 달을 보여줄지. 그래프에서 달을 고르면 그 달의 총액을, 고른 달이
+  // 없으면 지금 적고 있는 달을 보여준다. 고른 달일 때는 이름표에 몇 월인지 적는다 —
+  // 바로 아래 작성 내역은 여전히 지금 달의 입력칸이라, 숫자만 바뀌면 헷갈린다.
+  // 그래프 항목(전기료 등)을 무엇으로 보고 있든 여기 숫자는 늘 그 달의 **총액**이다.
+  function utilityHeroView(){
+    var picked = uiFlags.utilityBreakdownMk;
+    if(picked){
+      var pu = (state.utilities && state.utilities[picked]) || defaultUtilityMonth();
+      return { label: monthLabel(picked) + " 관리비", total: utilityTotal(pu), picked: true };
+    }
+    return { label: "최종 관리비", total: utilityTotal(getUtilityMonth(state.currentMonth)), picked: false };
+  }
+  // 맨 위 이름표와 숫자만 갈아끼운다. 화면을 통째로 다시 그리면 바로 위 작성 내역
+  // 입력칸이 새 노드로 바뀌어 아이폰에서 키패드가 내려간다.
+  function paintUtilityHero(){
+    var view = utilityHeroView();
+    var labelEl = document.querySelector("#mp-main .mp-hero .mp-util-total-label");
+    if(labelEl) labelEl.textContent = view.label;
+    var heroTotal = document.querySelector("#mp-main .mp-hero .mp-total");
+    if(heroTotal){
+      heroTotal.textContent = won(view.total);
+      heroTotal.classList.toggle("is-picked-month", view.picked);
+    }
+  }
   function updateUtilityDisplay(){
     var mk = state.currentMonth;
-    var totalEl = document.querySelector("#mp-main .mp-hero .mp-total");
-    if(totalEl) totalEl.textContent = won(utilityTotal(getUtilityMonth(mk)));
+    paintUtilityHero();
     var section = document.getElementById("mp-util-chart-section");
     if(hasAnyUtilityData()){
       var chartField = UTILITY_CHART_FIELDS[uiFlags.utilityChartField] ? uiFlags.utilityChartField : "total";
@@ -3859,7 +3884,7 @@
   function renderUtility(){
     var mk = state.currentMonth;
     var u = getUtilityMonth(mk);
-    var total = utilityTotal(u);
+    var heroView = utilityHeroView();
     var chartField = UTILITY_CHART_FIELDS[uiFlags.utilityChartField] ? uiFlags.utilityChartField : "total";
 
     return '<div class="mp-tab-sticky">' +
@@ -3891,8 +3916,8 @@
               '<input type="text" inputmode="numeric" class="mp-money mp-loan-input" data-action="set-utility-field" data-field="other" value="' + (u.other ? formatNumberString(u.other) : "") + '" placeholder="0"></div>' +
           '</div>'
         : '') +
-        '<div class="mp-label" style="margin-top:14px;">최종 관리비</div>' +
-        '<div class="mp-total pos" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(total) + '</div>' +
+        '<div class="mp-label mp-util-total-label" style="margin-top:14px;">' + esc(heroView.label) + '</div>' +
+        '<div class="mp-total pos' + (heroView.picked ? ' is-picked-month' : '') + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(heroView.total) + '</div>' +
         // 저장 버튼은 없앴다. 금액 다섯 칸은 치는 도중에도 저장되고 납부일자는 손 뗄 때
         // 저장되므로, 누를 일이 없는 버튼이 됐다. 대신 여기에 저장 표시만 남긴다.
         '<div class="mp-save-flash" id="mp-util-saved" aria-live="polite">저장됨 ✓</div>' +
@@ -3960,7 +3985,6 @@
     '</div>';
   }
 
-  // ---------- 대출 탭 ----------
   // ---------- 대출 탭 ----------
   function renderLoan(){
     // 종료한 대출은 끝난 빚이라 총액에서 뺀다. 대신 몇 건을 접어 뒀는지 바로 아래 적어서
@@ -4593,14 +4617,18 @@
       saveState(); render(); return;
     }
 
-    if(action === "month-prev"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
-    if(action === "month-next"){ commitPendingAll(); state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
+    // 달을 옮기면 그래프에서 골라 둔 달은 푼다. 안 그러면 10월로 넘어왔는데 맨 위에는
+    // 아직 "2월 관리비"가 떠 있고, 더 멀리 가면 그 달이 그래프 범위 밖으로 나가 버린다.
+    if(action === "month-prev"){ commitPendingAll(); uiFlags.utilityBreakdownMk = ""; state.currentMonth = shiftMonth(state.currentMonth, -1); saveState(); render(); return; }
+    if(action === "month-next"){ commitPendingAll(); uiFlags.utilityBreakdownMk = ""; state.currentMonth = shiftMonth(state.currentMonth, 1); saveState(); render(); return; }
     if(action === "toggle-month-picker"){ uiFlags.showMonthPicker = !uiFlags.showMonthPicker; render(); return; }
     if(action === "toggle-utility-breakdown"){
       var bdMk = el.dataset.mk;
       uiFlags.utilityBreakdownMk = (uiFlags.utilityBreakdownMk === bdMk) ? "" : bdMk;
       var bdBox = document.getElementById("mp-util-breakdown");
       if(bdBox) bdBox.innerHTML = utilityBreakdownHTML();
+      // 맨 위 숫자도 고른 달의 총액으로. 다시 눌러 닫으면 이번 달로 돌아온다.
+      paintUtilityHero();
       var svgEl = document.querySelector("#mp-main .mp-util-chart");
       if(svgEl){
         [].forEach.call(svgEl.querySelectorAll(".mp-util-pt-dot"), function(d){
@@ -4799,8 +4827,9 @@
     if(el.dataset.action === "set-utility-field" && el.dataset.field !== "payDate"){
       var umLive = getUtilityMonth(state.currentMonth);
       umLive[el.dataset.field] = Math.abs(parseMoneyValue(el.value));
-      var totalElLive = document.querySelector("#mp-main .mp-hero .mp-total");
-      if(totalElLive) totalElLive.textContent = won(utilityTotal(umLive));
+      // 그래프에서 다른 달을 골라 둔 채로 이번 달을 적고 있을 수 있다. 그때 맨 위 숫자는
+      // 고른 달 것이므로, 이번 달 합계로 덮어쓰지 않도록 같은 헬퍼를 지난다.
+      paintUtilityHero();
       liveUtilityChartPatch();
       // 치는 도중에도 기기에 저장한다. 예전에는 화면 합계만 바뀌고 저장은 안 돼서,
       // 저장된 것처럼 보이는 채로 앱을 닫으면 방금 친 금액이 사라졌다.
@@ -5204,6 +5233,7 @@
       var gm = String(fd.get("month")).padStart(2, "0");
       state.currentMonth = gy + "-" + gm;
       uiFlags.showMonthPicker = false;
+      uiFlags.utilityBreakdownMk = "";
       saveState(); render(); return;
     }
 
