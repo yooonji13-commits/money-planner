@@ -827,6 +827,15 @@
   .mp-personal-top-row{ display:flex; align-items:center; gap:8px; }
   .mp-personal-top-row > *:first-child{ flex:1; min-width:0; }
 
+  /* 개인 탭 잠금 버튼. 전에는 글자 없는 12px짜리 자물쇠 하나뿐이라 어디 있는지 찾지 못했고,
+     29x24라 손가락으로 누르기에도 작았다. 글씨를 붙이고 옆 버튼과 같은 높이로 키운다.
+     잠겨 있을 때는 조용한 회색, 안 걸려 있을 때는 눌러보게 되는 파란색으로 둔다. */
+  .mp-lock-toggle{
+    flex-shrink:0; display:flex; align-items:center; gap:5px;
+    min-height:44px; padding:8px 13px; font-size:.78rem;
+  }
+  .mp-lock-toggle.is-locked{ color:var(--muted); }
+
   .mp-lock-screen{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:40px 20px; }
   .mp-lock-icon{ font-size:2.4rem; }
   .mp-lock-form{ display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:6px; }
@@ -3385,7 +3394,9 @@
             '<button type="button" class="mp-btn ghost small" data-action="cancel-add-account">취소</button>' +
           '</form>' :
           '<button class="mp-btn ghost block" data-action="show-add-account">+ 계좌 추가</button>')) +
-      '<button type="button" class="mp-icon-btn mp-edit-icon" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' + (getPersonalPasswordHash() ? '🔒' : '🔓') + '</button>' +
+      '<button type="button" class="mp-btn ghost mp-lock-toggle' + (getPersonalPasswordHash() ? ' is-locked' : '') + '" data-action="toggle-password-setup" title="개인 탭 잠금 설정">' +
+        (getPersonalPasswordHash() ? '🔒' : '🔓') + ' 비밀번호' +
+      '</button>' +
       '</div>';
 
     if(expandedAcc){
