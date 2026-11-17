@@ -437,6 +437,13 @@
   }
   .mp-loan-hint:empty{ display:none; }
   .mp-loan-input{ width:100%; }
+  /* 맨 위 금액 아래 평균 한 줄. 금액을 가리지 않게 작고 회색이되, 숫자라서 굵게 둔다.
+     적힌 달이 하나도 없으면 빈 문자열이라 자리를 차지하지 않는다. */
+  .mp-util-avg{
+    font-size:.72rem; color:var(--muted); font-weight:700; margin-top:3px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mp-util-avg:empty{ display:none; }
   .mp-util-chart-tabs{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
   .mp-util-chart-tabs .mp-sort-btn{ flex-shrink:0; }
   .mp-util-chart-wrap{ width:100%; overflow-x:auto; margin-top:10px; -webkit-overflow-scrolling:touch; }
@@ -2395,9 +2402,35 @@
     var picked = uiFlags.utilityBreakdownMk;
     if(picked){
       var pu = (state.utilities && state.utilities[picked]) || defaultUtilityMonth();
-      return { label: monthLabel(picked) + " 관리비", total: utilityTotal(pu), picked: true };
+      return { label: monthLabel(picked) + " 관리비", total: utilityTotal(pu), picked: true, mk: picked };
     }
-    return { label: "최종 관리비", total: utilityTotal(getUtilityMonth(state.currentMonth)), picked: false };
+    return { label: "최종 관리비", total: utilityTotal(getUtilityMonth(state.currentMonth)), picked: false, mk: state.currentMonth };
+  }
+  // 맨 위 금액 아래 한 줄: 보고 있는 달을 포함한 최근 세 달의 평균.
+  //
+  // **아직 안 적은 달(0원)은 빼고 센다.** 넣어서 평균을 내면 실제보다 낮게 나와서, 이번
+  // 달이 유난히 많이 나온 것처럼 보인다. 그래서 값이 적힌 달만 골라 세 달을 채운다.
+  // 세 달이 안 차면 있는 만큼만 세고 "최근 2개월 평균"처럼 몇 달인지 밝힌다 — 두 달치를
+  // 세 달 평균이라고 적으면 숫자를 잘못 믿게 된다.
+  //
+  // 뒤로 훑는 범위는 UTIL_AVG_SCAN_MONTHS까지다. 중간에 몇 달 비어 있어도 "최근"이라는
+  // 말이 무색할 만큼 옛날까지 끌어오지는 않는다.
+  var UTIL_AVG_MONTHS = 3;
+  var UTIL_AVG_SCAN_MONTHS = 12;
+  function utilityRecentAvgText(anchorKey){
+    if(!anchorKey) return "";
+    var totals = [], key = anchorKey;
+    for(var i = 0; i < UTIL_AVG_SCAN_MONTHS && totals.length < UTIL_AVG_MONTHS; i++){
+      var um = state.utilities && state.utilities[key];
+      if(um){
+        var t = utilityTotal(um);
+        if(t > 0) totals.push(t);
+      }
+      key = shiftMonth(key, -1);
+    }
+    if(!totals.length) return "";
+    var sum = totals.reduce(function(s, v){ return s + v; }, 0);
+    return "최근 " + totals.length + "개월 평균 " + won(Math.round(sum / totals.length));
   }
   // 맨 위 이름표와 숫자만 갈아끼운다. 화면을 통째로 다시 그리면 바로 위 작성 내역
   // 입력칸이 새 노드로 바뀌어 아이폰에서 키패드가 내려간다.
@@ -2410,6 +2443,9 @@
       heroTotal.textContent = won(view.total);
       heroTotal.classList.toggle("is-picked-month", view.picked);
     }
+    // 평균도 같은 달에서 나오므로 늘 같이 갈아끼운다.
+    var avgEl = document.querySelector("#mp-main .mp-hero .mp-util-avg");
+    if(avgEl) avgEl.textContent = utilityRecentAvgText(view.mk);
   }
   function updateUtilityDisplay(){
     var mk = state.currentMonth;
@@ -3929,6 +3965,7 @@
         : '') +
         '<div class="mp-label mp-util-total-label" style="margin-top:14px;">' + esc(heroView.label) + '</div>' +
         '<div class="mp-total pos' + (heroView.picked ? ' is-picked-month' : '') + '" style="font-size:1.3rem;font-weight:700;letter-spacing:normal;">' + won(heroView.total) + '</div>' +
+        '<div class="mp-util-avg">' + esc(utilityRecentAvgText(heroView.mk)) + '</div>' +
         // 저장 버튼은 없앴다. 금액 다섯 칸은 치는 도중에도 저장되고 납부일자는 손 뗄 때
         // 저장되므로, 누를 일이 없는 버튼이 됐다. 대신 여기에 저장 표시만 남긴다.
         '<div class="mp-save-flash" id="mp-util-saved" aria-live="polite">저장됨 ✓</div>' +
