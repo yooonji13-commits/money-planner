@@ -388,6 +388,12 @@
   /* 펼친 카드는 흐리게 하지 않는다 — 종료 취소 버튼을 눌러야 하는 자리다 */
   .mp-loan-closed-at{ font-size:.72rem; color:var(--muted); margin-top:8px; }
   .mp-loan-close-btn{ margin-top:10px; }
+  /* 저축 펼친 달의 머리: ‹ 2026년 3월 › */
+  .mp-sv-month-nav{ justify-content:space-between; }
+  .mp-sv-month-nav .mp-account-name{
+    flex:1; text-align:center; font-size:1rem;
+  }
+  .mp-sv-month-nav .mp-month-btn{ flex-shrink:0; }
   .mp-account-name-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%; }
   .mp-account-name{ font-size:.88rem; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* 접힌 카드의 이름은 두 줄까지 보여주고 그 뒤로 말줄임한다.
@@ -3695,8 +3701,10 @@
 
       html += '<div class="mp-account is-expanded">' +
         '<div class="mp-account-body">' +
-          '<div class="mp-account-name-row">' +
-            '<div class="mp-account-name">' + monthNum + '월</div>' +
+          '<div class="mp-account-name-row mp-sv-month-nav">' +
+            '<button type="button" class="mp-month-btn" data-action="savings-month-prev" title="전월">‹</button>' +
+            '<div class="mp-account-name">' + esc(monthLabel(mk)) + '</div>' +
+            '<button type="button" class="mp-month-btn" data-action="savings-month-next" title="다음월">›</button>' +
           '</div>' +
           // 답을 맨 위에. 아래 입력칸들은 이 숫자가 어떻게 나왔는지를 설명하는 자리다.
           '<div class="mp-sv-net-card">' +
@@ -4537,6 +4545,11 @@
       } else {
         uiFlags.savingsExpanded = false;
       }
+      saveState(); render(); return;
+    }
+    if(action === "savings-month-prev" || action === "savings-month-next"){
+      commitPendingAll();
+      state.currentMonth = shiftMonth(state.currentMonth, action === "savings-month-next" ? 1 : -1);
       saveState(); render(); return;
     }
     if(action === "savings-year-prev"){
