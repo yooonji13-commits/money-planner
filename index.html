@@ -2138,8 +2138,29 @@
         '<b>' + won(sum) + '</b>' +
       '</div>';
   }
+  // 월을 쓰는 탭(저축)의 목록 순서: **1월이 위, 12월이 아래**다.
+  //
+  // - 월을 안 정한 항목은 **맨 아래로** 내린다. fixedItemMonth()가 "안 정함"을 0으로 주므로
+  //   그대로 비교하면 1월보다 위로 올라온다.
+  // - 같은 달끼리는 **적은 순서를 그대로** 지킨다(안정 정렬). 월만 보고 비교하면 같은 달
+  //   항목들의 차례가 그릴 때마다 달라질 수 있다.
+  // - **저장된 배열은 건드리지 않는다.** map()으로 복사본을 만든 뒤 정렬한다 — 저장 순서가
+  //   바뀌면 다른 기기와 줄 차례가 어긋난다.
+  function fixedItemsByMonth(items){
+    return items.map(function(it, i){
+      return { it: it, i: i, m: fixedItemMonth(it) };
+    }).sort(function(a, b){
+      if(a.m !== b.m){
+        if(!a.m) return 1;
+        if(!b.m) return -1;
+        return a.m < b.m ? -1 : 1;
+      }
+      return a.i - b.i;
+    }).map(function(x){ return x.it; });
+  }
   function fixedItemsRowsHTML(){
     var items = getFixedItems();
+    if(isFixedMonthTab()) items = fixedItemsByMonth(items);
     if(!isLivingFixedTab()) return items.map(fixedItemRowHTML).join("");
 
     // 생활비 탭은 분류별로 묶어서 보여준다. 목록에 없는 분류나 빈 분류도 데이터를 건드리지
@@ -5165,6 +5186,8 @@
           uiFlags.fixedGroupOpen[el.value || "기타"] = true;
           renderFixedItemsPanel();
         }
+        // 월이 바뀌면 줄세우는 자리가 달라진다. 목록을 다시 그려 그 줄을 제자리로 옮긴다.
+        else if(action === "edit-lf-month" && isFixedMonthTab()) renderFixedItemsPanel();
         else if(action === "edit-lf-amount") updateFixedItemsTotal();
       }
       return;
