@@ -4813,6 +4813,11 @@
     return false;
   }
 
+  // 저축 탭의 '연간' 화면인지. 달을 펼친 화면은 여기에 들지 않는다.
+  function isSavingsYearScreen(){
+    return state.activeTab === "family" && !uiFlags.savingsExpanded;
+  }
+
   var swipeStart = null;
   var swallowNextClick = false;
   // 손을 뗀 뒤 사파리가 탭으로 쳐서 click을 한 번 더 보낼 수 있다. 그대로 두면 쓸어넘긴
@@ -4844,13 +4849,32 @@
     if(!s || !e.changedTouches || e.changedTouches.length !== 1) return;
     var dx = e.changedTouches[0].clientX - s.x;
     var dy = e.changedTouches[0].clientY - s.y;
-    // 오른쪽으로 충분히(70px), 위아래로는 조금만. 세로로 더 많이 움직였으면 스크롤이다.
-    if(dx < 70) return;
+    // 가로로 충분히(70px), 위아래로는 조금만. 세로로 더 많이 움직였으면 스크롤이다.
+    // 천천히 끌고 다니다 멈춘 것도 쓸어넘긴 게 아니다.
+    if(Math.abs(dx) < 70) return;
     if(Math.abs(dy) > 50) return;
     if(Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    // 천천히 끌고 다니다 멈춘 것은 쓸어넘긴 게 아니다.
     if(Date.now() - s.t > 700) return;
-    if(goBackOne()){
+
+    var acted;
+    if(isSavingsYearScreen()){
+      // 저축 연간 화면에서는 좌우로 쓸어 해를 넘긴다. 오른쪽은 지난해, 왼쪽은 다음해로
+      // — 화면이 손가락을 따라간다고 보면 왼쪽에 있던 지난해가 오른쪽으로 끌려 나온다.
+      // 연도 ‹ › 버튼과 같은 방향이다.
+      //
+      // 이 화면에서만 가로채는 이유: 여기서는 오른쪽으로 쓸어도 goBackOne()이 뒤로 갈
+      // 곳을 못 찾아 아무 일도 일어나지 않는다(그 자리가 비어 있다). 달을 펼친 화면은
+      // 건드리지 않는다 — 거기서 오른쪽으로 쓰는 것은 이미 "뒤로가기"라는 뜻이 있다.
+      commitPendingAll();
+      state.currentMonth = shiftMonth(state.currentMonth, dx > 0 ? -12 : 12);
+      saveState(); render();
+      acted = true;
+    } else {
+      // 그 밖의 화면은 예전 그대로다. 오른쪽으로 쓸면 뒤로, 왼쪽은 아무 일도 없다
+      // (탭은 넘기지 않는다 — 사용자가 정한 동작이다).
+      acted = dx > 0 && goBackOne();
+    }
+    if(acted){
       // touchend의 기본 동작을 막으면 사파리가 뒤이어 보내는 가짜 click이 아예 생기지
       // 않는다. 그게 첫째 방패다 — 방금 render()로 화면이 바뀌었기 때문에, 그 click이
       // 살아 있으면 손가락 자리에 새로 온 엉뚱한 카드가 열린다.
