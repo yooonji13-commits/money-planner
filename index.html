@@ -43,6 +43,20 @@
   /* ---- animation system ---- */
   @keyframes mp-card-expand{ from{ opacity:0; transform:scale(.97); } to{ opacity:1; transform:scale(1); } }
   @keyframes mp-reveal{ from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:translateY(0); } }
+  /* 해·달을 좌우로 넘길 때 새 화면이 손가락을 따라 들어온다.
+     들어오는 쪽만 그린다 — 나가는 쪽까지 하려면 옛 화면을 붙들고 있어야 하는데,
+     render()가 #mp-main을 통째로 갈아치우는 구조와 맞지 않는다. */
+  /* 14px인 이유: 카드 오른쪽 여백이 16px이다. 그보다 크게 밀면 애니메이션이 도는 동안
+     카드가 화면 밖으로 삐져나가 가로 스크롤이 생긴다(22px일 때 7px 넘쳤다). */
+  @keyframes mp-slide-from-left{ from{ opacity:0; transform:translateX(-14px); } to{ opacity:1; transform:translateX(0); } }
+  @keyframes mp-slide-from-right{ from{ opacity:0; transform:translateX(14px); } to{ opacity:1; transform:translateX(0); } }
+  /* 펼친 카드에는 이미 .mp-account.is-expanded의 펼침 애니메이션(mp-card-expand)이 걸려
+     있고 선택자 힘이 더 세다. 그대로 두면 달을 넘겨도 좌우 느낌이 묻힌다. 달을 넘길 때는
+     어느 쪽으로 가는지가 더 중요하므로 같은 힘으로 덮어쓴다. */
+  .mp-account.is-expanded.mp-slide-from-left{ animation: mp-slide-from-left .2s ease-out; }
+  .mp-account.is-expanded.mp-slide-from-right{ animation: mp-slide-from-right .2s ease-out; }
+  .mp-slide-from-left{ animation: mp-slide-from-left .2s ease-out; }
+  .mp-slide-from-right{ animation: mp-slide-from-right .2s ease-out; }
   @keyframes mp-tab-fade-in{ from{ opacity:0; transform:translateY(5px); } to{ opacity:1; transform:translateY(0); } }
 
   .mp-btn, .mp-icon-btn, .mp-tab, .mp-sort-btn, .mp-month-btn,
@@ -4554,18 +4568,19 @@
     }
     if(action === "savings-month-prev" || action === "savings-month-next"){
       commitPendingAll();
-      state.currentMonth = shiftMonth(state.currentMonth, action === "savings-month-next" ? 1 : -1);
-      saveState(); render(); return;
+      var moStep = action === "savings-month-next" ? 1 : -1;
+      state.currentMonth = shiftMonth(state.currentMonth, moStep);
+      saveState(); render();
+      playMonthSlide(moStep);
+      return;
     }
-    if(action === "savings-year-prev"){
+    if(action === "savings-year-prev" || action === "savings-year-next"){
       commitPendingAll();
-      state.currentMonth = shiftMonth(state.currentMonth, -12);
-      saveState(); render(); return;
-    }
-    if(action === "savings-year-next"){
-      commitPendingAll();
-      state.currentMonth = shiftMonth(state.currentMonth, 12);
-      saveState(); render(); return;
+      var yrStep = action === "savings-year-next" ? 12 : -12;
+      state.currentMonth = shiftMonth(state.currentMonth, yrStep);
+      saveState(); render();
+      playMonthSlide(yrStep);
+      return;
     }
     if(action === "delete-savings-tx"){
       var sm = getSavingsMonth(state.currentMonth);
@@ -4813,6 +4828,20 @@
     return false;
   }
 
+  // 좌우로 넘긴 직후, 새로 그려진 화면이 들어오는 시늉을 하게 한다.
+  // render()는 동기라서 돌아온 뒤에는 새 노드가 이미 있다. 거기에 바로 클래스를 건다.
+  //
+  // step이 음수면(지난해·전월) 왼쪽에 있던 것을 끌어온 셈이라 왼쪽에서 들어오고,
+  // 양수면 오른쪽에서 들어온다. 쓸기와 ‹ › 버튼이 같은 함수를 쓰므로 둘의 방향이
+  // 어긋날 수 없다.
+  //
+  // 움직임을 싫어하는 설정(prefers-reduced-motion)은 맨 위 전역 규칙이 이미 꺼 준다.
+  function playMonthSlide(step){
+    var el = document.querySelector("#mp-main .mp-savings-grid") ||
+             document.querySelector("#mp-main .mp-account.is-expanded");
+    if(!el) return;
+    el.classList.add(step < 0 ? "mp-slide-from-left" : "mp-slide-from-right");
+  }
   // 저축 탭의 '연간' 화면인지. 달을 펼친 화면은 여기에 들지 않는다.
   function isSavingsYearScreen(){
     return state.activeTab === "family" && !uiFlags.savingsExpanded;
@@ -4866,8 +4895,10 @@
       // 곳을 못 찾아 아무 일도 일어나지 않는다(그 자리가 비어 있다). 달을 펼친 화면은
       // 건드리지 않는다 — 거기서 오른쪽으로 쓰는 것은 이미 "뒤로가기"라는 뜻이 있다.
       commitPendingAll();
-      state.currentMonth = shiftMonth(state.currentMonth, dx > 0 ? -12 : 12);
+      var yearStep = dx > 0 ? -12 : 12;
+      state.currentMonth = shiftMonth(state.currentMonth, yearStep);
       saveState(); render();
+      playMonthSlide(yearStep);
       acted = true;
     } else {
       // 그 밖의 화면은 예전 그대로다. 오른쪽으로 쓸면 뒤로, 왼쪽은 아무 일도 없다
