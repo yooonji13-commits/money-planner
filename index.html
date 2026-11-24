@@ -580,8 +580,11 @@
   /* 분류는 묶음 제목에 이미 적혀 있다. 그래서 줄에서는 읽는 흐름(날짜 → 내용 → 금액) 밖인
      오른쪽 끝으로 빼서, 분류를 옮길 때만 눈에 들어오게 한다. 예전에는 맨 앞에 있어서
      같은 분류 이름이 묶음마다 세로로 줄줄이 반복돼 보였다. */
+  /* 날짜 칸은 "2026.11.24" 열 글자가 다 들어가야 한다. 54px이던 때는 끝자리가 잘렸다
+     (재어 보니 글자가 56px을 쓴다). 아이폰 글꼴은 숫자가 조금 더 넓으므로 여유를 두고
+     70px로 잡는다. 줄어든 만큼은 내용 칸에서 가져오고, 내용은 길면 …로 줄여 보여준다. */
   .mp-sv-txrow{
-    display:grid; grid-template-columns:54px 1fr 64px 44px 16px; gap:5px; align-items:center;
+    display:grid; grid-template-columns:70px 1fr 64px 44px 16px; gap:5px; align-items:center;
     padding:7px 0; border-bottom:1px solid var(--line);
   }
   .mp-sv-txrow:last-child{ border-bottom:none; }
@@ -822,9 +825,19 @@
     padding:0 4px; font-size:.72rem; height:32px; box-sizing:border-box;
   }
   .mp-tx-add .mp-btn, .mp-tx-add-personal .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
+  /* 사용 내역 추가 양식: 분류 · 날짜 · 금액을 윗줄에, 내용과 버튼을 아랫줄에 둔다.
+     다섯 칸을 한 줄에 몰아넣었을 때는 내용 칸이 37px밖에 안 돼 두 글자도 못 보였고,
+     분류 칸은 드롭다운 화살표 자리에 밀려 '가족행사'가 '가족ㅎ'으로 잘렸다.
+     저축 고정내역 양식이 같은 이유로 이미 두 줄이다. */
   .mp-savings-tx-add{
-    display:grid; grid-template-columns:62px 88px 1fr 62px auto; gap:5px; margin-top:10px; align-items:center;
+    display:grid; grid-template-columns:82px 1fr 82px; gap:5px; margin-top:10px; align-items:center;
+    grid-template-areas:"cat date amount" "memo memo btn";
   }
+  .mp-savings-tx-add .mp-sv-add-cat{ grid-area:cat; }
+  .mp-savings-tx-add .mp-sv-add-date{ grid-area:date; }
+  .mp-savings-tx-add .mp-sv-add-amt{ grid-area:amount; text-align:right; }
+  .mp-savings-tx-add .mp-sv-add-memo{ grid-area:memo; }
+  .mp-savings-tx-add .mp-sv-add-btn{ grid-area:btn; width:100%; }
   .mp-savings-tx-add > *{ min-width:0; }
   .mp-savings-tx-add input[type="text"], .mp-savings-tx-add select{ padding:0 6px; font-size:.74rem; height:32px; box-sizing:border-box; width:100%; }
   .mp-savings-tx-add .mp-btn{ padding:0 8px; font-size:.74rem; height:32px; box-sizing:border-box; }
@@ -985,8 +998,14 @@
   var FIXED_ITEM_TAB_LABELS = { personal: "개인", living: "생활비", family: "저축" };
   // 생활비 고정내역에서 고를 수 있는 분류.
   var LIVING_FIXED_CATEGORIES = ["월급", "정훈", "윤지", "기타"];
-  // 저축 탭에서 쓰는 분류 (사용 내역, 고정내역 모두 같은 목록)
-  var SAVINGS_CATEGORIES = ["가족행사", "일반"];
+  // 저축 탭에서 쓰는 분류 (사용 내역, 고정내역 모두 같은 목록).
+  // 여기 적은 차례가 곧 드롭다운에 보이는 차례이고, 사용 내역을 분류별로 묶어 보여줄 때의
+  // 묶음 차례이기도 하다. 대부분이 '일반'이라 '일반'을 맨 위에 둔다.
+  var SAVINGS_CATEGORIES = ["일반", "가족행사"];
+  // 분류를 안 고르고 넣었을 때의 분류. **목록 차례와 일부러 따로 둔다.**
+  // 예전에는 "목록의 마지막 칸"을 기본값으로 썼는데, 그러면 목록 차례를 바꾸는 순간
+  // 분류 없이 적어둔 예전 내역들의 분류가 소리 없이 따라 바뀐다.
+  var SAVINGS_DEFAULT_CATEGORY = "일반";
   // 달을 오가는 탭들. 탭마다 보고 있던 달을 따로 기억한다(한쪽을 옮겨도 다른 쪽은 그대로).
   var MONTH_TABS = ["living", "utility", "family"];
   // x(삭제)를 누르면 한 번 더 확인한다. 새 삭제 기능이 생겨도 자동으로 적용되도록
@@ -3623,7 +3642,7 @@
       return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
     }).join("");
   }
-  function savingsTxCategory(t){ return t.category || SAVINGS_CATEGORIES[SAVINGS_CATEGORIES.length - 1]; }
+  function savingsTxCategory(t){ return t.category || SAVINGS_DEFAULT_CATEGORY; }
   function savingsTxRowHTML(t){
     // 분류는 묶음 제목에 이미 있으니 줄에서는 오른쪽 끝으로 뺀다(위 CSS 주석 참고).
     return '<div class="mp-sv-txrow" data-id="' + t.id + '">' +
@@ -3744,11 +3763,11 @@
         '</div>' +
         '<div class="mp-account-detail">' +
           '<form class="mp-savings-tx-add" data-action="add-savings-tx">' +
-            '<select name="category">' + savingsCategoryOptions(uiFlags.lastSavingsTxCategory || SAVINGS_CATEGORIES[0]) + '</select>' +
-            '<input type="text" inputmode="numeric" class="mp-date-input" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
-            '<input type="text" name="memo" placeholder="사용 내용">' +
-            '<input type="text" inputmode="numeric" class="mp-money" name="amount" placeholder="금액" required>' +
-            '<button class="mp-btn small" type="submit">추가</button>' +
+            '<select name="category" class="mp-sv-add-cat">' + savingsCategoryOptions(uiFlags.lastSavingsTxCategory || SAVINGS_DEFAULT_CATEGORY) + '</select>' +
+            '<input type="text" inputmode="numeric" class="mp-date-input mp-sv-add-date" name="date" value="' + fmtDateDots(todayISO) + '" placeholder="YYYY.MM.DD" maxlength="10" required>' +
+            '<input type="text" class="mp-sv-add-memo" name="memo" placeholder="사용 내용">' +
+            '<input type="text" inputmode="numeric" class="mp-money mp-sv-add-amt" name="amount" placeholder="금액" required>' +
+            '<button class="mp-btn small mp-sv-add-btn" type="submit">추가</button>' +
           '</form>' +
         '</div>' +
       '</div>';
@@ -5519,7 +5538,7 @@
       if(svAmt <= 0) return;
       var svm = getSavingsMonth(state.currentMonth);
       var svNewId = uid();
-      var svCat = (fd.get("category")||"").trim() || SAVINGS_CATEGORIES[0];
+      var svCat = (fd.get("category")||"").trim() || SAVINGS_DEFAULT_CATEGORY;
       svm.tx.push({ id: svNewId, date: parseDotDateToISO(fd.get("date")) || todayISO, memo: (fd.get("memo")||"").trim(), amount: svAmt, category: svCat, ts: Date.now() });
       // 다음에 또 넣을 때 같은 분류가 그대로 골라져 있도록 기억하고, 내역은 펼쳐서 보여준다.
       uiFlags.lastSavingsTxCategory = svCat;
