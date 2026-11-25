@@ -439,6 +439,12 @@
   .mp-loan-stats b{ color:var(--ink); font-variant-numeric:tabular-nums; }
   /* 회차 기준일: 입력칸 바로 아래에 붙어 "몇 회차가 언제인지"를 알려준다.
      비어 있으면(시작일도 회차도 없을 때) 자리를 차지하지 않는다. */
+  /* 현재 회차. 입력칸이 아니라 계산해서 보여주는 값이라 글자로 둔다.
+     크기는 입력칸이던 때(.mp-balance-edit)와 같게 맞춰 자리가 흔들리지 않게 한다. */
+  .mp-loan-installment{
+    font-size:1.2rem; font-weight:700; padding:2px 0;
+    font-variant-numeric:tabular-nums; color:var(--ink);
+  }
   .mp-loan-basis{
     font-size:.72rem; color:var(--accent); font-weight:700; margin-top:5px;
     font-variant-numeric:tabular-nums;
@@ -955,7 +961,18 @@
 (function(){
   "use strict";
   var STORAGE_KEY = "mp_data_v1";
-  var todayISO = new Date().toISOString().slice(0,10);
+  // **이 기기의 달력 날짜.** new Date().toISOString()을 쓰면 안 된다 — 그건 UTC라서
+  // 한국(UTC+9)에서는 자정부터 오전 9시 사이에 **어제 날짜**가 나온다. 그 시간에 적은
+  // 내역은 하루 앞 날짜로 적히고, 매달 1일 새벽에는 앱이 지난달로 열린다.
+  // 동기화 시각(updated_at)은 '언제'를 재는 값이라 UTC가 맞다 — 거기는 그대로 둔다.
+  function localISODate(d){
+    var x = d || new Date();
+    return x.getFullYear() + "-" +
+      String(x.getMonth() + 1).padStart(2, "0") + "-" +
+      String(x.getDate()).padStart(2, "0");
+  }
+  function localISOMonth(d){ return localISODate(d).slice(0, 7); }
+  var todayISO = localISODate();
   var currentMonthKey = todayISO.slice(0,7);
 
   // 대출 상환 방식 -----------------------------------------------------------
@@ -1057,6 +1074,13 @@
     (s.loans || []).forEach(function(l){
       if(typeof l.originalAmount !== "number") l.originalAmount = 0;
       if(typeof l.startDate !== "string") l.startDate = "";
+      // 상환 기준일은 1~31 정수만. 그 밖이면 칸 자체를 지운다 — 비어 있으면
+      // 시작일의 일자를 쓰므로, 지워도 예전과 똑같이 보인다.
+      if("payDay" in l){
+        var payDayNum = Math.floor(Number(l.payDay));
+        if(isFinite(payDayNum) && payDayNum >= 1 && payDayNum <= 31) l.payDay = payDayNum;
+        else delete l.payDay;
+      }
       if(typeof l.currentInstallment !== "number"){
         var maxInstallment = 0;
         if(Array.isArray(l.log)){
@@ -1654,7 +1678,7 @@
   var state = loadState();
   // 앱을 새로 열 때마다(완전히 종료 후 재실행 포함) 생활비/관리비/저축 탭이 오늘이 포함된
   // 달로 시작하도록 리셋한다. 이후 세션 중에는 탭마다 보고 있던 달이 따로 유지된다.
-  state.currentMonth = new Date().toISOString().slice(0,7);
+  state.currentMonth = localISOMonth();
   state.monthByTab = {};
   MONTH_TABS.forEach(function(t){ state.monthByTab[t] = state.currentMonth; });
   // **생활비만** 예외다. 아직 오지 않은 달에 미리 적어둔 게 있으면 그 달로 연다.
@@ -2718,10 +2742,8 @@
     var loLive = state.loans.find(function(l){ return l.id === loanId; });
     if(!loLive) return;
     var origInput = loanCard.querySelector('[data-action="set-loan-original"]');
-    var instInput = loanCard.querySelector('[data-action="set-loan-installment"]');
     var live = Object.assign({}, loLive);
     if(origInput) live.originalAmount = Math.abs(parseMoneyValue(origInput.value));
-    if(instInput) live.currentInstallment = Math.max(0, parseInt(instInput.value, 10) || 0);
     paintLoanCard(loanCard, live);
     paintLoanHeroTotal(live);
   }
@@ -2770,9 +2792,11 @@
     // 회차를 치는 동안 기준일과 원금·이자가 같이 따라오게 한다. 회차 숫자만 바꿔도 바로
     // 보여야 어느 회차를 적는 중인지 확인할 수 있다.
     var basisEl = card.querySelector(".mp-loan-basis");
-    if(basisEl) basisEl.textContent = loanInstallmentBasisText(loan, loan.currentInstallment);
+    if(basisEl) basisEl.textContent = loanInstallmentBasisText(loan, loanCurrentInstallment(loan));
     var splitEl = card.querySelector(".mp-loan-split");
-    if(splitEl) splitEl.textContent = loanSplitText(loan, loan.currentInstallment);
+    if(splitEl) splitEl.textContent = loanSplitText(loan, loanCurrentInstallment(loan));
+    var instEl = card.querySelector(".mp-loan-installment");
+    if(instEl) instEl.textContent = loanCurrentInstallment(loan) + "회차";
     // 대출 금액을 치면 총 회차가 달라지므로 끝나는 날도 같이 다시 센다.
     var endEl = card.querySelector(".mp-loan-end");
     if(endEl) endEl.textContent = loanEndText(loan);
@@ -2797,8 +2821,6 @@
     if(!loan) return;
     var originalInput = document.querySelector('[data-action="set-loan-original"][data-id="' + expandedLoanId + '"]');
     if(originalInput) loan.originalAmount = Math.abs(parseMoneyValue(originalInput.value));
-    var installmentInput = document.querySelector('[data-action="set-loan-installment"][data-id="' + expandedLoanId + '"]');
-    if(installmentInput) loan.currentInstallment = Math.max(0, parseInt(installmentInput.value, 10) || 0);
     var nameInput = document.querySelector('[data-action="set-loan-name"][data-id="' + expandedLoanId + '"]');
     if(nameInput) loan.name = nameInput.value.trim();
     // 날짜 칸은 치는 도중에 저장하지 않는다. 다 치고 탭을 옮기면 저장될 기회가 없으므로
@@ -3137,8 +3159,8 @@
   // 갚은 원금. 원리금균등은 낸 돈이 아니라 **원금만** 센다 — 상환 게이지와 잔여 금액이
   // 같은 기준을 써야 "게이지는 반인데 잔액은 그대로"가 되지 않는다.
   function loanRepaid(loan){
-    if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).repaidPrincipal;
-    return Number(loan.currentInstallment||0) * Number(loan.monthlyPayment||0);
+    if(isAmortizedLoan(loan)) return loanAmortize(loan, loanCurrentInstallment(loan)).repaidPrincipal;
+    return loanCurrentInstallment(loan) * Number(loan.monthlyPayment||0);
   }
   // 갚은 금액을 뭐라고 부를지 한곳에서 정한다. 원리금균등은 낸 돈 중 원금만 세므로
   // 이름도 그렇게 적는다 — 카드와 상세가 다른 이름으로 같은 숫자를 부르면 헷갈린다.
@@ -3151,7 +3173,7 @@
     return !!(loan && loan.closedAt);
   }
   function loanRemaining(loan){
-    if(isAmortizedLoan(loan)) return loanAmortize(loan, loan.currentInstallment).balance;
+    if(isAmortizedLoan(loan)) return loanAmortize(loan, loanCurrentInstallment(loan)).balance;
     return Number(loan.originalAmount||0) - loanRepaid(loan);
   }
   // 총 회차. 원리금균등은 월 상환액으로 나눠서 셀 수 없다(이자가 섞여 있다). 그래서
@@ -3195,10 +3217,28 @@
     if(total <= 0) return "만기일이 1회차 상환일보다 빨라요";
     return fmtDateDotsRead(loan.startDate) + " ~ " + fmtDateDotsRead(loan.endDate) + " · 총 " + total + "회차";
   }
+  // 기준일 선택지. 맨 위는 "시작일과 같은 날"이고, 그게 기본값이다 — 고르지 않으면
+  // 칸을 아예 만들지 않으므로 나중에 시작일을 고치면 기준일도 같이 움직인다.
+  function loanPayDayOptions(loan){
+    var set = Math.floor(Number(loan && loan.payDay));
+    var hasSet = isFinite(set) && set >= 1 && set <= 31;
+    var auto = loanPayDay(loan);
+    var out = '<option value=""' + (hasSet ? '' : ' selected') + '>' +
+      (auto ? "시작일과 같은 날 (" + auto + "일)" : "시작일을 먼저 넣어주세요") + '</option>';
+    for(var d = 1; d <= 31; d++){
+      out += '<option value="' + d + '"' + (hasSet && set === d ? ' selected' : '') + '>' + d + '일</option>';
+    }
+    return out;
+  }
+  function loanPayDayHintText(loan){
+    var day = loanPayDay(loan);
+    if(!day) return "시작일을 넣으면 그 날이 기준일이 돼요";
+    return "매달 " + day + "일이 되면 다음 회차로 넘어가요";
+  }
   function loanRemainingInstallments(loan){
     var t = loanTotalInstallments(loan);
     if(t <= 0) return 0;
-    return Math.max(0, t - Number(loan.currentInstallment||0));
+    return Math.max(0, t - loanCurrentInstallment(loan));
   }
 
   // 회차 날짜 계산 ----------------------------------------------------------
@@ -3220,15 +3260,67 @@
       String(base.getMonth() + 1).padStart(2, "0") + "-" +
       String(Math.min(da, lastDay)).padStart(2, "0");
   }
+  // 날짜의 '일'만 바꾼다. 그 달에 그 날이 없으면(2월 31일 등) 그 달 마지막 날로 맞춘다 —
+  // addMonthsKeepDay와 같은 규칙이다.
+  function setDayOfMonth(iso, day){
+    var p = String(iso || "").split("-");
+    if(p.length !== 3) return "";
+    var d = Math.floor(Number(day));
+    if(!isFinite(d) || d < 1) return iso;
+    var y = parseInt(p[0], 10), mo = parseInt(p[1], 10);
+    if(!isFinite(y) || !isFinite(mo)) return iso;
+    var lastDay = new Date(y, mo, 0).getDate();
+    return p[0] + "-" + p[1] + "-" + String(Math.min(d, lastDay)).padStart(2, "0");
+  }
+
+  // **상환 기준일** — 매달 며칠에 다음 회차로 넘어가는가.
+  //
+  // 적어둔 게 없으면 **시작일의 일자**를 쓴다. 시작일이 곧 1회차 상환일이므로 그 날이
+  // 원래의 상환일이다. 그래서 기준일을 건드리지 않은 대출은 예전과 날짜가 똑같다.
+  // 기준일을 따로 고르면 **모든 회차 날짜의 일자가 그 날로 맞춰진다**(2026-11-26 사용자가 정함).
+  function loanPayDay(loan){
+    var set = Math.floor(Number(loan && loan.payDay));
+    if(isFinite(set) && set >= 1 && set <= 31) return set;
+    var p = String((loan && loan.startDate) || "").split("-");
+    if(p.length !== 3) return 0;
+    var fromStart = parseInt(p[2], 10);
+    return (isFinite(fromStart) && fromStart >= 1 && fromStart <= 31) ? fromStart : 0;
+  }
+
+  // **오늘 기준 현재 회차.** 손으로 적지 않는다 — 기준일이 지나면(그날 포함) 저절로 넘어간다.
+  //
+  // 시작일이 없으면 셀 수가 없다. 그때는 **예전에 손으로 적어둔 값을 그대로 쓴다** —
+  // 0으로 떨어뜨리면 그 대출의 잔여 금액이 원금 전체로 튀어 오른다. 돈 숫자가 조용히
+  // 달라지면 안 되므로, 시작일을 넣기 전까지는 보던 값 그대로 둔다.
+  function loanCurrentInstallment(loan){
+    if(!loan) return 0;
+    var stored = Math.floor(Number(loan.currentInstallment || 0));
+    if(!isFinite(stored) || stored < 0) stored = 0;
+    if(typeof loan.startDate !== "string" || !loan.startDate) return stored;
+    var diff = monthsBetweenISO(loan.startDate, todayISO);
+    if(!isFinite(diff)) return stored;
+    var n = diff + 1;
+    if(n < 1) return 0;
+    if(n > LOAN_MAX_INSTALLMENTS) n = LOAN_MAX_INSTALLMENTS;
+    // 이번 달 기준일이 아직 안 왔으면 지난 회차에 머문다. 날짜 글자를 그대로 비교한다
+    // (YYYY-MM-DD는 글자 순서가 곧 날짜 순서다).
+    var due = loanInstallmentDate(loan, n);
+    if(due && due > todayISO) n -= 1;
+    var total = loanTotalInstallments(loan);
+    if(total > 0 && n > total) n = total;
+    return Math.max(0, n);
+  }
+
   function loanInstallmentDate(loan, n){
     if(!loan || typeof loan.startDate !== "string" || !loan.startDate) return "";
     var num = Math.floor(Number(n));
     if(!isFinite(num) || num < 1) return "";
-    return addMonthsKeepDay(loan.startDate, num - 1);
+    var base = addMonthsKeepDay(loan.startDate, num - 1);
+    return base ? setDayOfMonth(base, loanPayDay(loan)) : "";
   }
   // 현재 회차 아래에 붙는 한 줄. 시작일이 없으면 어디서 넣는지 알려준다.
   function loanInstallmentBasisText(loan, inst){
-    if(!loan.startDate) return "시작일을 넣으면 회차 날짜가 보여요 (위 ✎ 버튼)";
+    if(!loan.startDate) return "시작일을 넣으면 회차가 저절로 넘어가요 (위 ✎ 버튼)";
     var num = Math.max(0, Math.floor(Number(inst) || 0));
     if(num < 1) return "아직 0회차 · 1회차는 " + fmtDateDotsRead(loan.startDate);
     var d = loanInstallmentDate(loan, num);
@@ -3703,7 +3795,7 @@
     return nets.reduce(function(mx, n){ return Math.max(mx, Math.abs(n.net)); }, 0);
   }
   function savingsYearChartHTML(year, nets, peak){
-    var nowKey = new Date().toISOString().slice(0,7);
+    var nowKey = localISOMonth();
     return '<div class="mp-sv-year-chart">' + nets.map(function(n){
       var pct = peak > 0 ? Math.max(2, Math.round(Math.abs(n.net) / peak * 100)) : 0;
       var cls = !n.has ? " empty" : (n.net < 0 ? " neg" : "");
@@ -3805,7 +3897,7 @@
     html += '</div>';
 
     if(!expanded){
-      var nowKey = new Date().toISOString().slice(0,7);
+      var nowKey = localISOMonth();
       html += '<div class="mp-accounts-grid mp-savings-grid">';
       yearNets.forEach(function(n){
         // 막대는 그 해 가장 많이 모은 달 대비 길이다. 숫자를 하나씩 읽지 않아도
@@ -4154,7 +4246,6 @@
             '<select name="repayType" style="flex:1 1 100%;">' + loanRepayOptions("") + '</select>' +
             '<input type="text" inputmode="numeric" class="mp-money" name="originalAmount" placeholder="대출 금액" style="flex:1;">' +
             '<input type="text" inputmode="numeric" class="mp-money" name="monthlyPayment" placeholder="월 상환액" style="flex:1;">' +
-            '<input type="number" inputmode="numeric" name="currentInstallment" placeholder="회차" min="0" step="1" style="flex:1;">' +
             '<input type="text" name="rate" placeholder="금리 % (선택)" style="flex:1;">' +
             // 날짜 두 칸. .mp-date-input이 붙어 있어 치는 동안 점이 알아서 끼워진다.
             // 만기일은 원리금균등에서만 총 회차를 세는 데 쓰이지만, 여기서는 칸을 늘 내놓고
@@ -4170,6 +4261,8 @@
       var editingSettings0 = !!uiFlags.editingLoanSettings[expandedLoan.id];
       var remaining0 = loanRemaining(expandedLoan);
       var repaid0 = loanRepaid(expandedLoan);
+      // 회차는 손으로 적지 않는다. 1회차 상환일과 기준일, 그리고 오늘로 센다.
+      var inst0 = loanCurrentInstallment(expandedLoan);
       var totalInst0 = loanTotalInstallments(expandedLoan);
       var remainInst0 = loanRemainingInstallments(expandedLoan);
       var loanBar0 = loanBarState(expandedLoan.originalAmount, repaid0);
@@ -4198,9 +4291,9 @@
           '<div class="mp-progress ' + loanBar0.cls + '" style="width:100%;"><div style="width:' + loanBar0.pct + '%"></div></div>' +
           '<div class="mp-balance-field" style="margin-top:10px;">' +
             '<div class="mp-balance-label">현재 회차</div>' +
-            '<input type="number" inputmode="numeric" class="mp-balance-edit" data-action="set-loan-installment" data-id="' + expandedLoan.id + '" value="' + Number(expandedLoan.currentInstallment||0) + '" placeholder="0" min="0" step="1" style="width:100%;">' +
-            '<div class="mp-loan-basis">' + esc(loanInstallmentBasisText(expandedLoan, expandedLoan.currentInstallment)) + '</div>' +
-            '<div class="mp-loan-split">' + esc(loanSplitText(expandedLoan, expandedLoan.currentInstallment)) + '</div>' +
+            '<div class="mp-loan-installment">' + inst0 + '회차</div>' +
+            '<div class="mp-loan-basis">' + esc(loanInstallmentBasisText(expandedLoan, inst0)) + '</div>' +
+            '<div class="mp-loan-split">' + esc(loanSplitText(expandedLoan, inst0)) + '</div>' +
           '</div>' +
           '<div class="mp-loan-stats">' + loanStatsHTML(expandedLoan) + '</div>' +
           '<div class="mp-loan-end">' + esc(loanEndText(expandedLoan)) + '</div>' +
@@ -4223,6 +4316,12 @@
               '</div>' +
               '<div class="mp-detail-field"><div class="mp-label">' + (isAmortizedLoan(expandedLoan) ? '1회차 상환일' : '대출기간 시작일') + '</div>' +
                 '<input type="text" inputmode="numeric" class="mp-date-input" data-action="set-loan-startdate" data-id="' + expandedLoan.id + '" value="' + (expandedLoan.startDate ? fmtDateDots(expandedLoan.startDate) : "") + '" placeholder="YYYY.MM.DD" maxlength="10">' +
+              '</div>' +
+              '<div class="mp-detail-field"><div class="mp-label">상환 기준일 (매달)</div>' +
+                '<select class="mp-loan-input" data-action="set-loan-payday" data-id="' + expandedLoan.id + '">' +
+                  loanPayDayOptions(expandedLoan) +
+                '</select>' +
+                '<div class="mp-loan-hint">' + esc(loanPayDayHintText(expandedLoan)) + '</div>' +
               '</div>' +
               // 만기일은 원리금균등에서만 쓴다. 다른 방식은 월 상환액으로 총 회차를 세므로
               // 칸을 내놓으면 넣어도 아무 데도 안 쓰이는 칸이 된다.
@@ -4659,7 +4758,7 @@
       commitPendingLoanFields();
       // 종료는 지우는 게 아니다. 금액·회차는 손대지 않고 종료한 날짜만 적고 뗀다.
       if(isLoanClosed(closeLoan)) delete closeLoan.closedAt;
-      else closeLoan.closedAt = new Date().toISOString().slice(0,10);
+      else closeLoan.closedAt = localISODate();
       saveState(); render(); return;
     }
     if(action === "toggle-loan"){
@@ -4669,8 +4768,6 @@
       if(pendingLoan){
         var pendingOriginalInput = main.querySelector('[data-action="set-loan-original"][data-id="' + toggleLoanId + '"]');
         if(pendingOriginalInput) pendingLoan.originalAmount = Math.abs(parseMoneyValue(pendingOriginalInput.value));
-        var pendingInstallmentInput = main.querySelector('[data-action="set-loan-installment"][data-id="' + toggleLoanId + '"]');
-        if(pendingInstallmentInput) pendingLoan.currentInstallment = Math.max(0, parseInt(pendingInstallmentInput.value, 10) || 0);
       }
       var willExpandLoan = !uiFlags.expandedLoans[toggleLoanId];
       if(willExpandLoan) uiFlags.expandedLoans = {};
@@ -5057,10 +5154,6 @@
       }
       return;
     }
-    if(el.dataset.action === "set-loan-installment"){
-      liveUpdateLoanFromDOM(el.dataset.id);
-      return;
-    }
     // 내역 메모도 치는 도중에 저장한다. 손을 뗄 때만 저장하면, 고치고 바로 뒤로가기나 탭을
     // 누를 때 그 입력칸이 사라져 고친 내용이 조용히 되돌아간다. 메모는 형식 제한이 없어
     // 중간 상태를 저장해도 잃을 것이 없다. saveState()는 화면을 다시 그리지 않는다.
@@ -5340,9 +5433,16 @@
       }
       return;
     }
-    if(action === "set-loan-installment"){
-      var loanI = state.loans.find(function(l){ return l.id === el.dataset.id; });
-      if(loanI){ loanI.currentInstallment = Math.max(0, parseInt(el.value, 10) || 0); saveState(); updateLoanDisplay(loanI.id); }
+    // 상환 기준일. 빈 값은 "시작일과 같은 날"이라 칸 자체를 지운다 — 나중에 시작일을
+    // 고치면 기준일도 따라 움직인다.
+    if(action === "set-loan-payday"){
+      var loanP = state.loans.find(function(l){ return l.id === el.dataset.id; });
+      if(loanP){
+        var payDayPick = Math.floor(Number(el.value));
+        if(isFinite(payDayPick) && payDayPick >= 1 && payDayPick <= 31) loanP.payDay = payDayPick;
+        else delete loanP.payDay;
+        saveState(); render();
+      }
       return;
     }
     if(action === "set-savings-amount"){
@@ -5531,10 +5631,11 @@
       var loanRate = (fd.get("rate")||"").trim();
       var loanOriginal = Math.abs(parseMoneyValue(fd.get("originalAmount")));
       var loanMonthly = Math.abs(parseMoneyValue(fd.get("monthlyPayment")));
-      var loanInstallment = Math.max(0, parseInt(fd.get("currentInstallment"), 10) || 0);
+      // 회차는 받지 않는다. 1회차 상환일과 오늘로 세기 때문이다. 칸은 0으로 둔다 —
+      // 시작일 없이 만든 대출이 기댈 자리다.
       var newLoan = { id: uid(), name: loanName, originalAmount: loanOriginal,
         startDate: parseDotDateToISO(fd.get("startDate")) || "",
-        rate: loanRate, monthlyPayment: loanMonthly, currentInstallment: loanInstallment };
+        rate: loanRate, monthlyPayment: loanMonthly, currentInstallment: 0 };
       // 예전 방식이면 칸 자체를 만들지 않는다(값 없음 = 예전 방식).
       if(fd.get("repayType") === LOAN_REPAY_AMORTIZED) newLoan.repayType = LOAN_REPAY_AMORTIZED;
       // 만기일은 원리금균등이 아니어도 적어둔 값을 버리지 않고 담아 둔다. 다 채우지 못한
