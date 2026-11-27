@@ -2692,13 +2692,38 @@
   }
 
   // 화면이 바뀌기 전에 치던 값을 모두 저장한다. 빠뜨린 자리가 생기지 않게 한 군데로 모았다.
+  // 탭을 옮기거나 앱이 백그라운드로 갈 때, 아직 손을 떼지 않은 입력칸의 값을 state에 담는다.
+  // **여기에 없는 칸은 "치다가 앱을 닫으면 사라지는 칸"이 된다.** 손을 떼면(focusout) 저장되는
+  // 칸은 전부 여기에도 있어야 한다 — 아이폰에서 글자를 치고 바로 홈으로 나가면 focusout이
+  // 오지 않기 때문이다. 새 입력칸을 만들 때 이 목록에 더하는 것을 잊지 않는다.
   function commitPendingAll(){
     commitPendingUtilityFields();
     commitPendingSavingsFields();
     commitPendingLivingFields();
     commitPendingLoanFields();
     commitPendingPersonalFields();
+    commitPendingFixedItemFields();
     commitPendingTxEdits();
+  }
+
+  // 고정내역 창의 줄들. 창이 열려 있을 때만 훑는다.
+  // 금액은 치는 도중에도 저장되지만 **내용·비고·분류는 손을 뗄 때만** 저장돼서,
+  // 글자를 치다가 앱을 닫으면 그대로 사라졌다(2026-11-27에 고침).
+  // 날짜 칸은 없다 — 고정내역에는 '월' 드롭다운만 있고, 드롭다운은 고르는 순간 저장된다.
+  function commitPendingFixedItemFields(){
+    var panel = document.getElementById("mp-fixed-panel");
+    if(!panel || !uiFlags.showFixedItems) return;
+    var items = getFixedItems();
+    panel.querySelectorAll('[data-action^="edit-lf-"]').forEach(function(el){
+      var action = el.dataset.action;
+      if(action === "edit-lf-month") return;
+      var it = items.find(function(x){ return x.id === el.dataset.id; });
+      if(!it) return;
+      if(action === "edit-lf-name") it.name = el.value;
+      else if(action === "edit-lf-note") it.note = el.value;
+      else if(action === "edit-lf-category") it.category = el.value;
+      else if(action === "edit-lf-amount") it.amount = Math.abs(parseMoneyValue(el.value));
+    });
   }
 
   function commitPendingPersonalFields(){
@@ -2709,6 +2734,15 @@
     if(!acc) return;
     var balanceInput = document.querySelector('[data-action="set-balance"][data-id="' + expandedAccountId + '"]');
     if(balanceInput) acc.balance = parseMoneyValue(balanceInput.value);
+    // ✎ 안의 글자 칸들도 손을 뗄 때만 저장된다. 치다가 앱을 닫으면 사라지던 자리다.
+    var purposeInput = document.querySelector('[data-action="set-purpose"][data-id="' + expandedAccountId + '"]');
+    if(purposeInput) acc.purpose = purposeInput.value.trim();
+    var numberInput = document.querySelector('[data-action="set-account-number"][data-id="' + expandedAccountId + '"]');
+    if(numberInput) acc.accountNumber = numberInput.value.trim();
+    // 이름은 **비어 있으면 그냥 둔다.** 지우는 도중에 앱을 닫았다고 해서 이름 없는 계좌가
+    // 되면 안 된다. 손 뗄 때의 규칙과 같다.
+    var accNameInput = document.querySelector('[data-action="set-account-name"][data-id="' + expandedAccountId + '"]');
+    if(accNameInput && accNameInput.value.trim()) acc.name = accNameInput.value.trim();
   }
   function updatePersonalBalanceDisplay(accountId){
     var acc = state.accounts.find(function(a){ return a.id === accountId; });
@@ -2823,6 +2857,12 @@
     if(originalInput) loan.originalAmount = Math.abs(parseMoneyValue(originalInput.value));
     var nameInput = document.querySelector('[data-action="set-loan-name"][data-id="' + expandedLoanId + '"]');
     if(nameInput) loan.name = nameInput.value.trim();
+    // ✎ 안의 두 칸도 손을 뗄 때만 저장된다. 월 상환액은 잔여 금액 계산에 바로 쓰이므로
+    // 치다가 앱을 닫고 다시 열면 숫자가 통째로 어긋나 보였다.
+    var rateInput = document.querySelector('[data-action="set-loan-rate"][data-id="' + expandedLoanId + '"]');
+    if(rateInput) loan.rate = rateInput.value.trim();
+    var monthlyInput = document.querySelector('[data-action="set-loan-monthly"][data-id="' + expandedLoanId + '"]');
+    if(monthlyInput) loan.monthlyPayment = Math.abs(parseMoneyValue(monthlyInput.value));
     // 날짜 칸은 치는 도중에 저장하지 않는다. 다 치고 탭을 옮기면 저장될 기회가 없으므로
     // 여기서 한 번 더 훑는다. 무효하면 그냥 두고 이미 저장된 날짜를 건드리지 않는다.
     ["startDate", "endDate"].forEach(function(field){

@@ -261,6 +261,41 @@ new Date().toISOString().slice(0,10);   // "2026-11-25"  ← 어제
 
 **어떻게:** 정규화에서 `payDate`를 문자열로 강제한다.
 
+### 새 입력칸을 만들면 commitPendingAll()에도 더해야 한다
+
+**증상:** 고정내역의 **내용**을 고치고 아이폰에서 바로 홈으로 나가면 그 글자가 사라졌다.
+같은 창의 **금액**은 멀쩡히 남았다. 계좌 이름·용도·계좌번호, 대출 금리·월 상환액도 같았다.
+
+**원인:** 이 칸들은 **손을 뗄 때(focusout/change)만** 저장된다. 그런데 아이폰에서 글자를
+치다가 홈으로 나가면 **focusout이 오지 않는다** — 오는 것은 `visibilitychange(hidden)`뿐이다.
+그 자리를 받아주는 것이 `flushPendingBeforeLeave()` → `commitPendingAll()`인데,
+그 함수가 훑는 칸 목록에 이 칸들이 빠져 있었다. 금액 칸들은 `input`에서도 저장돼서 무사했다.
+
+**그래서 규칙:** 손 뗄 때 저장되는 칸을 새로 만들면 **반드시 `commitPendingAll()`에도 더한다.**
+빠뜨리면 "치다가 앱을 닫으면 사라지는 칸"이 하나 생기고, 아무 오류도 나지 않아 눈치채기 어렵다.
+
+**어떻게 확인하나:** 손을 떼지 않은 채로 백그라운드 전환만 흉내 내고, 저장소에 남는지 본다.
+
+```js
+var el = document.querySelector('[data-action="edit-lf-name"]');
+el.focus();
+Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, "내용테스트");
+el.dispatchEvent(new Event("input", { bubbles: true }));   // 손은 떼지 않는다
+Object.defineProperty(document, "hidden", { configurable: true, get: function(){ return true; } });
+document.dispatchEvent(new Event("visibilitychange"));
+localStorage.getItem("mp_data_v1").indexOf("내용테스트") >= 0;   // false면 새는 칸이다
+```
+
+**함정 둘:**
+
+- **날짜 칸은 "사라짐"이 정상일 수 있다.** 저장될 때 `2026-02-09` 꼴로 바뀌므로, 친 글자
+  (`2026.02.09`)로 찾으면 멀쩡한 칸도 사라진 것처럼 보인다. 저장된 모양으로 찾아야 한다.
+- 관리비 첫 칸은 금액이 아니라 **납부일**이다. `[data-action="set-utility-field"]`를 그냥
+  첫째로 집으면 날짜 칸을 재게 된다.
+
+**비워 두는 것과 안 친 것은 다르다.** 계좌 이름을 지우던 중에 앱을 닫았다고 이름 없는 계좌가
+되면 안 된다. 마무리 저장도 손 뗄 때와 같은 규칙을 쓴다 — 빈 이름이면 그냥 둔다.
+
 ### 손 뗄 때만 저장하면 고친 값이 사라진다
 
 **증상:** 개인 탭에서 6,000원을 3,000원으로 고치고 뒤로가기를 눌렀다 다시 들어오면 6,000원으로
